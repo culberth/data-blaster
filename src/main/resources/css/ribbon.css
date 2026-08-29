@@ -1,0 +1,250 @@
+/*
+ * Design tokens. JavaFX resolves these as looked-up colours, so every rule below refers to a role
+ * rather than repeating a hex literal — which is what made the theme impossible to change without
+ * hand-editing every rule (and every inline style= attribute in the FXML).
+ */
+.root {
+    -jfx-surface: #fafafa;
+    -jfx-surface-raised: #ffffff;
+    -jfx-surface-header: #f3f2f1;
+    -jfx-surface-hover: #edebe9;
+    -jfx-surface-hover-strong: #e1dfdd;
+    -jfx-border: #d6d5d3;
+    -jfx-text: #323130;
+    -jfx-text-secondary: #605e5c;
+    -jfx-text-readout: #3b3a39;
+    -jfx-icon: #424242;
+    -jfx-accent: #0078d4;
+    -jfx-accent-dark: #004578;
+    -jfx-accent-surface: #c7e0f4;
+}
+
+/*
+ * Dark theme. The entire theme is this block: because every rule below refers to a token rather
+ * than a hex literal, redefining the tokens re-colours the whole stylesheet. JavaFX resolves
+ * looked-up colours from the node outward, so a style class on the scene root is enough — no
+ * second stylesheet, and no parallel copy of every rule to keep in step.
+ *
+ * `.root.theme-dark` outranks `.root` on specificity, which is what makes the override take.
+ *
+ * Contrast is asserted, not asserted-to: ThemeContrastTest parses these values and checks every
+ * text pair against NFR4's 4.5:1 and every focus indicator against SC 2.4.11's 3:1. The tightest
+ * pair here measures 4.38:1 (the selection border on its own fill, a non-text 3:1 requirement).
+ */
+.root.theme-dark {
+    -jfx-surface: #1e1e1e;
+    -jfx-surface-raised: #252526;
+    -jfx-surface-header: #2b2b2d;
+    -jfx-surface-hover: #37373a;
+    -jfx-surface-hover-strong: #45454a;
+    -jfx-border: #4a4a52;
+    -jfx-text: #ececec;
+    -jfx-text-secondary: #b4b4b4;
+    -jfx-text-readout: #d4d4d4;
+    -jfx-icon: #d4d4d4;
+    -jfx-accent: #4da3f0;
+    -jfx-accent-dark: #a8d4f8;
+    -jfx-accent-surface: #123a5c;
+}
+
+/*
+ * modena paints its own control chrome from -fx-base and friends, which know nothing about the
+ * tokens above. Without this the ribbon would go dark around light buttons, sliders and menus.
+ */
+.root.theme-dark {
+    -fx-base: #2b2b2d;
+    -fx-background: #1e1e1e;
+    -fx-control-inner-background: #252526;
+    -fx-control-inner-background-alt: #2b2b2d;
+    -fx-accent: #0d5a94;
+    -fx-focus-color: #4da3f0;
+    -fx-faint-focus-color: #4da3f022;
+    -fx-text-background-color: #ececec;
+    -fx-text-base-color: #ececec;
+    -fx-selection-bar-non-focused: #3a3a3d;
+}
+
+/*
+ * Colours only. JavaFX's looked-up-value mechanism is specified for paints, so a font size cannot
+ * be tokenised the same way — declaring -jfx-font-size-* here would read as a type scale that
+ * nothing actually honours, which is worse than the literals the rules below carry.
+ */
+
+.ribbon .tab-header-area {
+    -fx-padding: 0;
+}
+
+.ribbon .tab-header-area .tab-header-background {
+    -fx-background-color: -jfx-surface-header;
+}
+
+.ribbon .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 4 12 4 12;
+}
+
+.ribbon .tab:selected {
+    -fx-background-color: -jfx-surface-raised;
+    -fx-border-color: -jfx-border;
+    -fx-border-width: 0 1 0 1;
+}
+
+.ribbon .tab-content-area {
+    -fx-background-color: -jfx-surface;
+    -fx-border-color: -jfx-border;
+    -fx-border-width: 0 0 1 0;
+}
+
+.ribbon-content {
+    -fx-padding: 6 8 6 8;
+    -fx-spacing: 8;
+}
+
+/*
+ * BOTTOM_CENTER, not CENTER: the group captions are meant to read as one horizontal band across
+ * the ribbon, and centring each group's contents put them on different baselines whenever the
+ * groups differed in content height.
+ */
+.ribbon-group {
+    -fx-alignment: bottom-center;
+    -fx-spacing: 4;
+    -fx-padding: 4 10 4 10;
+    -fx-border-color: transparent -jfx-border transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+.ribbon-group-buttons {
+    -fx-alignment: center;
+}
+
+.ribbon-group-title {
+    -fx-font-size: 11px;
+    -fx-text-fill: -jfx-text-secondary;
+}
+
+.ribbon-button {
+    -fx-background-color: transparent;
+    -fx-padding: 6 12 6 12;
+    -fx-background-radius: 3;
+    -fx-font-size: 11px;
+    -fx-text-fill: -jfx-text;
+    -fx-graphic-text-gap: 4;
+}
+
+.ribbon-button:hover {
+    -fx-background-color: -jfx-surface-hover;
+}
+
+.ribbon-button:selected {
+    -fx-background-color: -jfx-accent-surface;
+    -fx-border-color: -jfx-accent;
+    -fx-border-width: 1;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+
+/*
+ * .ribbon-button sets a transparent background, and an author stylesheet outranks modena's
+ * user-agent :focused rule, so without these the keyboard focus indicator would be invisible
+ * on every ribbon button.
+ */
+.ribbon-button:focused {
+    -fx-background-color: -jfx-surface-hover;
+    -fx-border-color: -jfx-accent;
+    -fx-border-width: 2;
+    -fx-border-radius: 3;
+    -fx-border-insets: -1;
+}
+
+/*
+ * The selected button is the first ribbon stop a keyboard user reaches, and it already carries a
+ * 1px blue border when unfocused. A darker, wider border alone is only a ~2.2:1 change against
+ * that — below SC 2.4.11's 3:1 — so focus adds a second channel: an outer ring separated from the
+ * selection border by a gap, which reads as a distinct shape rather than a shade of the same one.
+ */
+.ribbon-button:selected:focused {
+    -fx-background-color: -jfx-accent-surface;
+    -fx-border-color: -jfx-accent-dark, -jfx-surface-raised, -jfx-accent-dark;
+    -fx-border-width: 2, 1, 1;
+    -fx-border-radius: 3, 4, 5;
+    -fx-border-insets: -1, -2, -3;
+}
+
+.ribbon-icon-shape {
+    -fx-stroke: -jfx-icon;
+}
+
+.ribbon-button:selected .ribbon-icon-shape {
+    -fx-stroke: -jfx-accent;
+}
+
+.content-area {
+    -fx-background-color: -jfx-surface-raised;
+}
+
+.ribbon-slider-label {
+    -fx-font-size: 10px;
+    -fx-text-fill: -jfx-text-secondary;
+}
+
+/*
+ * Read-only value read-outs (the log folder path, the Sim Factor value). These were previously
+ * greyed by setting disable="true", which applied modena's 0.4 disabled opacity — dropping
+ * contrast to roughly 1.8:1 — and removed the node from screen-reader traversal entirely. This
+ * keeps them visually secondary while staying legible and exposed to assistive technology.
+ */
+.ribbon-readout {
+    -fx-font-size: 10px;
+    -fx-text-fill: -jfx-text-readout;
+}
+
+/* Small inline action inside a ribbon group (e.g. Opacity's Reset), not a top-level ribbon button. */
+.ribbon-inline-button {
+    -fx-font-size: 10px;
+    -fx-padding: 2 8 2 8;
+    -fx-background-radius: 3;
+    -fx-background-color: -jfx-surface-hover;
+    -fx-text-fill: -jfx-text-readout;
+}
+
+.ribbon-inline-button:hover {
+    -fx-background-color: -jfx-surface-hover-strong;
+}
+
+.ribbon-inline-button:focused {
+    -fx-border-color: -jfx-accent;
+    -fx-border-width: 2;
+    -fx-border-radius: 3;
+    -fx-border-insets: -1;
+}
+
+.ribbon-scroll {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.ribbon-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/*
+ * Dialog typography. Preferences carries real content now, so its labels need roles rather than
+ * the inline style= attributes the dialogs used to use — those were literals the theme tokens
+ * could never reach, which is the problem the tokens at the top of this file exist to solve.
+ */
+.dialog-field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -jfx-text;
+}
+
+/* Same reasoning as .ribbon-readout: visually secondary, still legible, still traversable. */
+.dialog-readout {
+    -fx-font-size: 11px;
+    -fx-text-fill: -jfx-text-readout;
+}
+
+.dialog-hint {
+    -fx-font-size: 11px;
+    -fx-text-fill: -jfx-text-secondary;
+}

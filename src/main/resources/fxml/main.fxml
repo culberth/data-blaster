@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The application shell: menu bar, ribbon and content host. Each ribbon group lives in its own
+  FXML with its own controller under fxml/ribbon/, so adding a group is a new file plus one
+  <fx:include> here — not another block in this file and another handler in MainController.
+-->
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.example.jfxribbon.controller.MainController">
+    <top>
+        <VBox>
+            <MenuBar>
+                <Menu text="_File" mnemonicParsing="true">
+                    <!--
+                      No Alt+F4 accelerator: the window manager already delivers that gesture as a
+                      close request. Binding it here would route the OS close into a path that
+                      skips WINDOW_CLOSE_REQUEST, so it would silently bypass any future
+                      unsaved-changes guard that the title-bar X honours.
+                    -->
+                    <MenuItem text="E_xit" mnemonicParsing="true" onAction="#onExit"/>
+                </Menu>
+                <Menu text="_Edit" mnemonicParsing="true">
+                    <MenuItem text="_Preferences" mnemonicParsing="true" onAction="#onPreferences"
+                              accelerator="Shortcut+Comma"/>
+                </Menu>
+                <Menu text="_Help" mnemonicParsing="true">
+                    <MenuItem text="_About" mnemonicParsing="true" onAction="#onAbout"
+                              accelerator="F1"/>
+                </Menu>
+            </MenuBar>
+
+            <TabPane styleClass="ribbon" tabClosingPolicy="UNAVAILABLE">
+                <Tab text="Home">
+                    <!--
+                      Scrolls rather than clips: below roughly 700px the groups compress past
+                      usability and the last one used to be cut off by the tab content area with
+                      no way to reach it.
+                    -->
+                    <!--
+                      prefViewportHeight is set so the horizontal scrollbar's own height is added
+                      to the ScrollPane's request rather than taken out of the viewport: without
+                      it, at the 640px minimum the bar left 81px of viewport for 95px of content
+                      that fitToHeight cannot compress, clipping the group captions.
+                    -->
+                    <ScrollPane styleClass="ribbon-scroll" fitToHeight="true"
+                                prefViewportHeight="96" minViewportHeight="96"
+                                hbarPolicy="AS_NEEDED" vbarPolicy="NEVER">
+                        <HBox styleClass="ribbon-content">
+                            <fx:include source="ribbon/mode-group.fxml"/>
+                            <fx:include source="ribbon/tools-group.fxml"/>
+                            <fx:include source="ribbon/appearance-group.fxml"/>
+                        </HBox>
+                    </ScrollPane>
+                </Tab>
+            </TabPane>
+        </VBox>
+    </top>
+    <center>
+        <VBox fx:id="contentArea" styleClass="content-area">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+        </VBox>
+    </center>
+</BorderPane>

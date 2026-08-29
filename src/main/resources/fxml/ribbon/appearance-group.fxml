@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- The "Appearance" ribbon group: the Sim Factor preference and the content opacity. -->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.example.jfxribbon.controller.ribbon.AppearanceGroupController"
+      styleClass="ribbon-group">
+
+    <HBox styleClass="ribbon-group-buttons" spacing="12">
+        <VBox alignment="CENTER" spacing="2">
+            <Label fx:id="simFactorCaption" text="Sim Factor" styleClass="ribbon-slider-label"/>
+            <HBox alignment="CENTER" spacing="6">
+                <Slider fx:id="simFactorSlider" accessibleText="Sim Factor"
+                        min="-5.0" max="5.0" value="0.0"
+                        majorTickUnit="2.5" minorTickCount="4" blockIncrement="0.1"
+                        snapToTicks="true" showTickMarks="true" showTickLabels="true"
+                        prefWidth="150" minWidth="120"/>
+                <Label fx:id="simFactorValueLabel" text="0.0" styleClass="ribbon-readout"/>
+            </HBox>
+        </VBox>
+        <VBox alignment="CENTER" spacing="2">
+            <Label fx:id="opacityCaption" text="Opacity" styleClass="ribbon-slider-label"/>
+            <HBox alignment="CENTER" spacing="6">
+                <Slider fx:id="opacitySlider" accessibleText="Content opacity"
+                        min="0.3" max="1.0" value="1.0" prefWidth="90"/>
+                <Label fx:id="opacityValueLabel" text="100%" styleClass="ribbon-readout"/>
+                <Button fx:id="opacityResetButton" text="Reset" styleClass="ribbon-inline-button"
+                        onAction="#onResetOpacity"
+                        accessibleText="Reset content opacity to 100%"/>
+            </HBox>
+        </VBox>
+    </HBox>
+    <Label text="Appearance" styleClass="ribbon-group-title"/>
+</VBox>
