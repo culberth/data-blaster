@@ -4,28 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo actually is
 
-**Data Blaster** — a JavaFX + Spring Boot desktop tool, forked from JFXRibbon.
+**Data Blaster** — `com.culberth.tools:data-blaster`, package `com.culberth.tools.datablaster`. A
+JavaFX + Spring Boot desktop tool: an Office-style ribbon, switchable content views, modal dialogs,
+persisted settings, light/dark theming, and a small loopback-only HTTP companion API.
 
-The code in `src/` is currently still JFXRibbon as inherited: a desktop application shell
-(Office-style ribbon, switchable content views, modal dialogs) with a Spring Boot context behind it
-and a small loopback-only HTTP companion API. The directory name `tool-boilerplate` and the package
-`com.example.jfxribbon` are inherited and on their way out — the rename to Data Blaster
-(groupId `com.culberth.tools`, package `com.culberth.tools.datablaster`) is PRD requirement R27 and
-lands as its own commit before any feature work.
+Forked from JFXRibbon, a template written to be forked. The rename (PRD R27) is **done**; the
+directory `tool-boilerplate` and the GitHub remote are the last inherited names, and renaming those
+is a manual step outside the build.
 
-**When doing the rename: `JFXRibbon` goes, `ribbon` stays.** The app still has a ribbon, so
-`ribbon.css`, the `-jfx-*` CSS tokens, `controller.ribbon`, `fxml/ribbon/`, and every `ribbon-*`
-style class keep their names. `ribbon.css` is loaded by name and parsed by name in
-`ThemeContrastTest`, so a careless find-and-replace on `ribbon` breaks theming at runtime rather
-than at compile time. See PRD §4.4.
+**The four modes do not exist yet.** The ribbon's Mode toggles still select four inherited
+placeholder views. Replacing them with Log, Message, SOAP and REST — each with its own persisted
+settings — is the work specified in the PRD and not yet started.
+
+**`JFXRibbon` is gone; `ribbon` stays.** The app still has a ribbon, so `ribbon.css`, the `-jfx-*`
+CSS tokens, `controller.ribbon`, `fxml/ribbon/`, and every `ribbon-*` style class are correct as they
+are. `ribbon.css` is loaded by name and parsed by name in `ThemeContrastTest`, so a find-and-replace
+on `ribbon` breaks theming at runtime rather than at compile time.
 
 - [docs/architecture.md](docs/architecture.md) — how the **current** code works and why. Accurate as
-  of `9739cb3`. Keep it that way: PRD requirement R21 says architecture.md is updated in the same
-  change as the code it describes, not as a follow-up.
-- [docs/PRD.md](docs/PRD.md) — what is being **built next**: renaming the fork to Data Blaster, then
-  replacing the four placeholder views with four real modes (Log, Message, SOAP, REST) and giving
-  each one its own persisted settings. v1 makes the modes configurable and deliberately implements
-  none of their behaviour.
+  of the rename commit. Keep it that way: PRD requirement R21 says architecture.md is updated in the
+  same change as the code it describes, not as a follow-up.
+- [docs/PRD.md](docs/PRD.md) — what is being **built next**: the four modes and their settings. v1
+  makes the modes configurable and deliberately implements none of their behaviour. That boundary is
+  the thing to push back with when scope creeps.
 
 An earlier PRD in this repo described an unrelated Maven-archetype generator. That idea was
 abandoned, not built — if you find references to archetypes, Velocity templating, or
@@ -57,12 +58,9 @@ mvn spring-boot:run
 mvn exec:java
 
 # Windows jpackage app-image builds (manual, not run in CI)
-scripts/build-windowed.ps1   # dist/windowed/JFXRibbon/JFXRibbon.exe — no console
-scripts/build-console.ps1    # dist/console/JFXRibbon/JFXRibbon.exe — console attached, for diagnosing startup failures
+scripts/build-windowed.ps1   # dist/windowed/DataBlaster/DataBlaster.exe — no console
+scripts/build-console.ps1    # dist/console/DataBlaster/DataBlaster.exe — console attached, for diagnosing startup failures
 ```
-
-`mvn clean install` installs to `~/.m2`; there's no separate archetype build step despite what
-`docs/PRD.md` implies.
 
 Surefire's `runOrder` is pinned to `alphabetical` in `pom.xml` — do not remove this. The default
 (`filesystem`) differs between Windows and Linux, which previously let a test-ordering/shared-state
@@ -73,7 +71,7 @@ leak pass locally and fail only on CI.
 **Layers, dependencies point inward toward `model`:**
 
 ```
-bootstrap (Launcher, JFXRibbonApplication, AppConfig, ViewLoader)
+bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
   -> controller (MainController, Preferences/About, View1-4)
        -> ui (StageRegistry, ViewRegistry, ViewSwitcher, DialogService)
             -> model (AppState — imports nothing from the app)
@@ -97,9 +95,9 @@ web (StatusController, LoopbackHostFilter) -> model, via Snapshot only
   singleton.
 - Every FXML controller is `@Scope(SCOPE_PROTOTYPE)`. A singleton controller would stay bound to a
   stale, detached node tree after a reload.
-- `Launcher` (not `JFXRibbonApplication`) is the JAR's main class specifically so `java -jar` doesn't
+- `Launcher` (not `DataBlasterApplication`) is the JAR's main class specifically so `java -jar` doesn't
   trip JavaFX's launcher checks.
-- `JFXRibbonApplication.init()` starts Spring/Tomcat before any window exists, and retries with
+- `DataBlasterApplication.init()` starts Spring/Tomcat before any window exists, and retries with
   `--spring.main.web-application-type=none` **only** on a port conflict (`PortInUseException` /
   `BindException`, checked via `NestedExceptionUtils.getMostSpecificCause`); anything else is
   rethrown. Any log line about the fallback must be emitted *after* the replacement context is up —

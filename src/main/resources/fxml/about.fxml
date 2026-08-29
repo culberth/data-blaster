@@ -9,13 +9,13 @@
 
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.example.jfxribbon.controller.AboutController"
+      fx:controller="com.culberth.tools.datablaster.controller.AboutController"
       spacing="12" prefWidth="320" alignment="CENTER">
     <padding>
         <Insets top="20" right="20" bottom="20" left="20"/>
     </padding>
 
-    <Label text="JFXRibbon" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+    <Label text="Data Blaster" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
     <Label text="Version 2.0.0-SNAPSHOT"/>
     <Separator/>
     <Label text="A JavaFX application backed by Spring Boot, with an Office-style Ribbon toolbar."

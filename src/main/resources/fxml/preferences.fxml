@@ -20,7 +20,7 @@
 -->
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.example.jfxribbon.controller.PreferencesController"
+      fx:controller="com.culberth.tools.datablaster.controller.PreferencesController"
       spacing="14" prefWidth="440">
     <padding>
         <Insets top="16" right="16" bottom="16" left="16"/>

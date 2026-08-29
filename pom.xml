@@ -11,11 +11,16 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.example</groupId>
-    <artifactId>tool-boilerplate</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <groupId>com.culberth.tools</groupId>
+    <artifactId>data-blaster</artifactId>
+    <!--
+      Reset to 1.0.0 rather than continuing JFXRibbon's 2.0.0-SNAPSHOT. That number recorded the
+      Spring Boot 4 migration being breaking for forks of the template, which says nothing about a
+      differently-named artifact that has never been released.
+    -->
+    <version>1.0.0-SNAPSHOT</version>
     <name>${project.artifactId}</name>
-    <description>JavaFX application with an Office-style Ribbon, backed by a Spring Boot context</description>
+    <description>Mode-based data tool with an Office-style Ribbon, backed by a Spring Boot context</description>
     <packaging>jar</packaging>
 
     <properties>
@@ -115,7 +120,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.example.jfxribbon.Launcher</mainClass>
+                    <mainClass>com.culberth.tools.datablaster.Launcher</mainClass>
                 </configuration>
                 <executions>
                     <execution>
@@ -145,7 +150,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.3.0</version>
                 <configuration>
-                    <mainClass>com.example.jfxribbon.Launcher</mainClass>
+                    <mainClass>com.culberth.tools.datablaster.Launcher</mainClass>
                 </configuration>
             </plugin>
         </plugins>

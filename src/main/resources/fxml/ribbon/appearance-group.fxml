@@ -9,7 +9,7 @@
 <!-- The "Appearance" ribbon group: the Sim Factor preference and the content opacity. -->
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.example.jfxribbon.controller.ribbon.AppearanceGroupController"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.AppearanceGroupController"
       styleClass="ribbon-group">
 
     <HBox styleClass="ribbon-group-buttons" spacing="12">

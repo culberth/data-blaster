@@ -10,7 +10,7 @@
 <!-- The "Tools" ribbon group: the log folder picker and its read-out. -->
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.example.jfxribbon.controller.ribbon.ToolsGroupController"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.ToolsGroupController"
       styleClass="ribbon-group">
 
     <HBox styleClass="ribbon-group-buttons" spacing="6" alignment="CENTER_LEFT">

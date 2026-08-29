@@ -1,13 +1,14 @@
 # Architecture
 
-How JFXRibbon is put together, and — more usefully — **why**, since several of the arrangements
+How Data Blaster is put together, and — more usefully — **why**, since several of the arrangements
 here exist to prevent specific defects that a peer review found in earlier versions of this code.
 
 | | |
 |---|---|
-| **Describes** | `main` at `13d8707` |
+| **Describes** | `rename-to-data-blaster`, after the rename commit |
 | **Size** | ~1,180 lines of main Java, ~210 of test, 10 FXML files, one stylesheet |
 | **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (servlet), Maven |
+| **Origin** | Forked from JFXRibbon, which was written as a template. See [PRD.md](PRD.md) |
 
 ---
 
@@ -18,15 +19,21 @@ and a small loopback-only HTTP layer. It runs on the JavaFX Application Thread w
 `ApplicationContext` behind it, so UI components are Spring beans and can be given dependencies by
 constructor injection.
 
-It exists to be forked. That shapes several decisions recorded below: where duplication is
-tolerated, and where it is not.
+**This document describes the shell as inherited, not the tool being built on it.** The four views
+behind the ribbon's Mode toggles are still placeholders; replacing them with the Log, Message, SOAP
+and REST modes — and giving each its own persisted settings — is what [PRD.md](PRD.md) specifies and
+has not been built yet. Where this document says the views are placeholders, that is still true and
+is the thing about to change.
+
+The shell existed to be forked, and this is the fork. That history shapes several decisions recorded
+below: where duplication is tolerated, and where it is not.
 
 ---
 
 ## 2. Layers and dependency direction
 
 ```
-  bootstrap    Launcher · JFXRibbonApplication · AppConfig · ViewLoader
+  bootstrap    Launcher · DataBlasterApplication · AppConfig · ViewLoader
                      |
                      v
   controller   MainController · Preferences/About · View1-4
@@ -47,7 +54,7 @@ imports another controller.
 
 | Package | Holds | Depends on |
 |---|---|---|
-| `com.example.jfxribbon` | Entry points, Spring config, FXML loading | `ui`, `controller` |
+| `com.culberth.tools.datablaster` | Entry points, Spring config, FXML loading | `ui`, `controller` |
 | `.model` | `AppState` — shared UI state and its off-thread projection | nothing in the app |
 | `.ui` | Window ownership, view registry, view swapping, dialogs | `model` |
 | `.controller` | The shell and the content views | `ui`, `model` |
@@ -60,8 +67,8 @@ imports another controller.
 
 1. `Launcher.main` — a separate entry point that does **not** extend `Application`, so the Spring
    Boot fat jar can be run with `java -jar` without tripping JavaFX's launcher checks.
-2. `JFXRibbonApplication.init()` boots Spring, including embedded Tomcat.
-3. `JFXRibbonApplication.start(Stage)` records the FX thread, registers the primary stage, loads
+2. `DataBlasterApplication.init()` boots Spring, including embedded Tomcat.
+3. `DataBlasterApplication.start(Stage)` records the FX thread, registers the primary stage, loads
    `main.fxml`, and shows the window.
 4. `stop()` closes the Spring context. The JVM then exits because Tomcat's non-daemon thread ends.
 
@@ -74,7 +81,7 @@ does not have — the app simply never opens, with no explanation.
 So `init()` catches a startup failure, checks whether its most specific cause is a
 `PortInUseException` or `BindException`, and if so retries with
 `--spring.main.web-application-type=none`. The UI starts without the HTTP layer, and the window
-title becomes `JFXRibbon (HTTP layer disabled)` so the degraded state is visible where the user
+title becomes `Data Blaster (HTTP layer disabled)` so the degraded state is visible where the user
 actually is.
 
 **Anything that is not a port conflict is rethrown.** A broad catch here would mislabel every
@@ -189,7 +196,7 @@ and must not replace the real failure with its own.
 An embedded Tomcat bound to `127.0.0.1:8080`, serving one endpoint:
 
 ```
-GET http://localhost:8080/api/status  ->  {"app":"JFXRibbon","state":"running"}
+GET http://localhost:8080/api/status  ->  {"app":"Data Blaster","state":"running"}
 ```
 
 **`LoopbackHostFilter` validates the `Host` header on every path**, returning a bare, bodiless 404
@@ -368,7 +375,7 @@ nothing. Each of those was verified by breaking it on purpose and watching the s
 
 Surefire runs every class in one JVM, so `AppState`'s recorded FX thread — a JVM-wide static — is
 shared across the whole suite. `AppStateTest` records its own thread and must put it back
-afterwards, and `FxmlSmokeTest` records the real FX thread the way `JFXRibbonApplication.start()`
+afterwards, and `FxmlSmokeTest` records the real FX thread the way `DataBlasterApplication.start()`
 does, which keeps the threading guard live while FXML loads rather than bypassed by a null.
 
 Surefire's run order is pinned to `alphabetical` in `pom.xml`. The default is `filesystem`, which
@@ -419,7 +426,7 @@ fine. Suppressing it means disabling the failure analyzers wholesale.
 **Nothing may be logged while a failed context is being replaced.** Spring Boot tears its logging
 system down when a context fails, so anything logged between that failure and the next context
 starting goes to a stopped Logback and is discarded without a trace. The port-conflict fallback in
-`JFXRibbonApplication.init()` logs *after* its replacement context is up for exactly this reason.
+`DataBlasterApplication.init()` logs *after* its replacement context is up for exactly this reason.
 
 This is a live constraint, not a historical note: any future recovery path that retries a context
 has the same window, and the symptom is a log line that simply is not there. It is not visible from
