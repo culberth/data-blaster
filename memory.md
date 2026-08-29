@@ -12,13 +12,20 @@ without being asked when status changes, a decision is made, or work lands.
   to be forked. This is that fork.
 
 ## Current state (as of 2026-08-29)
-- Branch `rename-to-data-blaster`, two commits ahead of `main`:
+- Branch `rename-to-data-blaster`, three commits' worth of work ahead of `main`:
   1. Baseline import of the inherited codebase (110 tests, 0 failures)
   2. The rename from JFXRibbon to Data Blaster
+  3. The mode model and mode-scoped settings (uncommitted at time of writing) — **209 tests, 0
+     failures**
 - Version reset to **1.0.0-SNAPSHOT**. JFXRibbon's `2.0.0-SNAPSHOT` numbered its Spring Boot 4
   migration and means nothing for a renamed artifact that has never shipped.
-- **The four modes do not exist yet.** The Mode toggles still select four placeholder views. The
-  shell, settings persistence, theming and headless test harness all work.
+- **The modes are real; their views and their editors are not.** `Mode` is a first-class enum,
+  `ViewRegistry` is keyed by it, the selected mode persists, and every mode's settings persist under
+  their own key namespace. The toggles read Log / Message / SOAP / REST.
+- **Still to do in v1:** the tabbed Preferences rebuild (General / Log / Message / SOAP), the
+  port-to-tail `TableView`, the four mode views including an honest REST placeholder, and per-tab
+  Reset. Until the tabs land, Message's type, SOAP's port and Log's mapping table persist correctly
+  but have nowhere to be edited.
 
 ## What is being built
 See `docs/PRD.md` — Data Blaster v1. Four modes (Log, Message, SOAP, REST), each with its own
@@ -52,3 +59,13 @@ visible placeholder (Q6); contextual ribbon in or out of v1 (Q7).
   `archetype-metadata.xml` anywhere are stale.
 - 2026-08-29 — Renamed JFXRibbon → Data Blaster across code, scripts and docs, as its own commit
   before any feature work. 110 tests green before and after.
+- 2026-08-29 — Built the mode model and mode-scoped settings (PRD R1–R13, R24–R26). `Mode`,
+  `MessageType` and `PortTailMapping` added; `Settings` became a record of per-mode records;
+  `AppState` gained `currentMode`, `messageType`, `soapPort` and an observable mapping list;
+  `SettingsStore` moved to namespaced keys with per-entry tolerant mapping reads; `SettingsService`
+  grew a `ListChangeListener`. `ViewRegistry` is keyed by `Mode`. 110 → 209 tests, all green.
+- 2026-08-29 — **Decision: the Sim Factor slider left the ribbon rather than being retargeted.**
+  Playback Speed Factor is a Log-mode setting, not an appearance one, and as a 0.1–10.0 multiplier a
+  linear slider strands `1.0` at 9% of its travel (PRD R-2). It is a `Spinner<Double>` in
+  Preferences (D11); the Appearance group is opacity only. `SettingsRestoreOrderTest` lost its
+  subject to this and now uses the Preferences spinner and the Mode ribbon group instead.

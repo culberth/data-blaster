@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javafx.beans.value.ChangeListener;
+import javafx.collections.ListChangeListener;
 import org.springframework.stereotype.Component;
 
 /**
@@ -41,35 +42,48 @@ public class SettingsService {
     /**
      * The most recent settings not yet written, or {@code null} when nothing is outstanding.
      *
-     * <p>This is the coalescing buffer. Dragging the Sim Factor slider across its range fires a
-     * change every 0.1, so writing on each one would mean about a hundred files for one gesture.
-     * Holding only the latest means a burst collapses into as few writes as the disk can keep up
-     * with, without a timer to tune or a delay before the value is safe.
+     * <p>This is the coalescing buffer. A control that fires on every step of a drag would
+     * otherwise mean a file per step, so holding only the latest collapses a burst into as few
+     * writes as the disk can keep up with, without a timer to tune or a delay before the value is
+     * safe.
      */
     private final AtomicReference<Settings> pending = new AtomicReference<>();
 
     /** Strongly held: see {@link #bind(AppState)} for why this one need not be weak. */
     private final ChangeListener<Object> persistListener;
 
+    /**
+     * The mapping table's subscription, which cannot be the listener above.
+     *
+     * <p>A {@code ChangeListener} on an {@code ObservableList} fires only when the property holding
+     * the list is set to a different list — which never happens, because the list is a final field.
+     * Adding, editing or removing a mapping would therefore reach nobody, and the edits would
+     * persist silently nowhere: no exception, no log line, just a table that is empty again on the
+     * next launch.
+     */
+    private final ListChangeListener<PortTailMapping> mappingsListener;
+
     private AppState boundState;
 
     public SettingsService(SettingsStore store) {
         this.store = store;
         this.persistListener = (observable, old, now) -> scheduleWrite();
+        this.mappingsListener = change -> scheduleWrite();
     }
 
     /**
      * Applies the stored settings to {@code appState}, then keeps the file in step with it.
      *
      * <p><strong>Call on the JavaFX Application Thread, before the shell is loaded.</strong>
-     * {@link AppState}'s mutators require that thread, and the ribbon controls read their initial
-     * values from {@code AppState} in their {@code initialize()} methods — so restoring after the
-     * shell exists would leave the sliders showing defaults while the state said otherwise.
+     * {@link AppState}'s mutators require that thread, and the controls read their initial values
+     * from {@code AppState} in their {@code initialize()} methods — so restoring after the shell
+     * exists would leave the controls showing defaults while the state said otherwise.
      *
      * <p><strong>Why this is not part of Spring's lifecycle.</strong> Restoring in a
      * {@code @PostConstruct} would run during context refresh, where a failure fails the context —
-     * and the context starting is what NFR1 protects. A settings file cannot be allowed to stop the
-     * application launching, so it is read after the context is up and the UI thread is known.
+     * and the context starting is what the start-even-when-a-part-fails rule protects. A settings
+     * file cannot be allowed to stop the application launching, so it is read after the context is
+     * up and the UI thread is known.
      *
      * <p><strong>Why a plain listener rather than a weak one.</strong> {@code AppState}'s Javadoc
      * requires weak registration because its usual subscribers are prototype-scoped controllers
@@ -80,16 +94,24 @@ public class SettingsService {
     public void bind(AppState appState) {
         Settings restored = store.read();
 
-        appState.setSimFactor(restored.simFactor());
-        appState.setLogFolder(restored.logFolderPath() == null
-                ? null
-                : new File(restored.logFolderPath()));
-
+        appState.setCurrentMode(restored.mode());
         appState.setTheme(restored.theme());
 
-        appState.simFactorProperty().addListener(persistListener);
-        appState.logFolderProperty().addListener(persistListener);
+        Settings.LogSettings log = restored.log();
+        appState.setPlaybackSpeedFactor(log.playbackSpeedFactor());
+        appState.setLogFolder(log.folderPath() == null ? null : new File(log.folderPath()));
+        appState.setPortTailMappings(log.mappings());
+
+        appState.setMessageType(restored.message().type());
+        appState.setSoapPort(restored.soap().port());
+
+        appState.currentModeProperty().addListener(persistListener);
         appState.themeProperty().addListener(persistListener);
+        appState.playbackSpeedFactorProperty().addListener(persistListener);
+        appState.logFolderProperty().addListener(persistListener);
+        appState.portTailMappings().addListener(mappingsListener);
+        appState.messageTypeProperty().addListener(persistListener);
+        appState.soapPortProperty().addListener(persistListener);
 
         this.boundState = appState;
         LOG.log(System.Logger.Level.DEBUG, () -> "Settings restored from " + store.location());
@@ -101,7 +123,9 @@ public class SettingsService {
      * <p>The values are read here, on the JavaFX Application Thread, rather than in the writer.
      * What crosses to the background thread is an immutable {@link Settings} captured at the moment
      * of the change — not a reference to live state the writer would have to read at whatever
-     * moment the disk got around to it.
+     * moment the disk got around to it. That includes the mapping set, which {@code Settings} copies
+     * on the way in; handing the writer the live observable list would put a collection the FX
+     * thread is still editing under a background reader.
      */
     private void scheduleWrite() {
         Settings settings = Settings.from(boundState);
@@ -136,15 +160,21 @@ public class SettingsService {
      */
     @PreDestroy
     void flushOnShutdown() {
-        // Unregister first. AppState outlives this service in every context that has more than one
-        // — which in production is none, but in tests is routine: a service bound to the shared
-        // AppState and never detached keeps writing to a directory the test has finished with. That
-        // showed up as a temp directory JUnit could not delete because something kept recreating a
-        // file in it, on Linux only, well away from anything that looked related.
+        // Unregister first, and unregister everything that was registered — the mapping listener
+        // included, or a detached service goes on writing every time the table changes. AppState
+        // outlives this service in every context that has more than one, which in production is
+        // none but in tests is routine: a service bound to the shared AppState and never detached
+        // keeps writing to a directory the test has finished with. That showed up as a temp
+        // directory JUnit could not delete because something kept recreating a file in it, on Linux
+        // only, well away from anything that looked related.
         if (boundState != null) {
-            boundState.simFactorProperty().removeListener(persistListener);
-            boundState.logFolderProperty().removeListener(persistListener);
+            boundState.currentModeProperty().removeListener(persistListener);
             boundState.themeProperty().removeListener(persistListener);
+            boundState.playbackSpeedFactorProperty().removeListener(persistListener);
+            boundState.logFolderProperty().removeListener(persistListener);
+            boundState.portTailMappings().removeListener(mappingsListener);
+            boundState.messageTypeProperty().removeListener(persistListener);
+            boundState.soapPortProperty().removeListener(persistListener);
         }
 
         writer.shutdown();

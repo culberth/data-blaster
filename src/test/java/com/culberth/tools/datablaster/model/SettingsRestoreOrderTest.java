@@ -3,6 +3,7 @@ package com.culberth.tools.datablaster.model;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.culberth.tools.datablaster.HeadlessToolkit;
 import com.culberth.tools.datablaster.ViewLoader;
@@ -12,9 +13,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
-import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.ToggleButton;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -28,12 +31,18 @@ import org.springframework.boot.test.context.SpringBootTest;
  * front of the user — the claim {@link SettingsService#bind} and {@code DataBlasterApplication.start}
  * both make in comments, checked against the real controllers rather than asserted.
  *
- * <p>The ribbon groups read their starting values from {@link AppState} in their
- * {@code initialize()} methods and never re-read them. So the ordering is not a matter of taste:
- * get it wrong and the controls show defaults while the state says something else, with nothing
- * failing and nothing logged.
+ * <p>Controls read their starting values from {@link AppState} in their {@code initialize()} methods
+ * and never re-read them. So the ordering is not a matter of taste: get it wrong and the controls
+ * show defaults while the state says something else, with nothing failing and nothing logged.
  *
- * <p><strong>The ribbon groups are loaded directly rather than through the shell.</strong>
+ * <p><strong>The subjects are the Preferences spinner and the Mode ribbon group.</strong> The
+ * template used the Appearance group's Sim Factor slider, which no longer exists — Playback Speed
+ * Factor moved to Preferences, and Appearance is left with opacity, which is not persisted and so
+ * cannot show this at all. The Mode group is the replacement on the ribbon side: it reads the
+ * restored mode once in {@code initialize()} and selects the matching toggle, which is exactly the
+ * read-once shape this test is about.
+ *
+ * <p><strong>The groups are loaded directly rather than through the shell.</strong>
  * {@code main.fxml} puts them inside a {@code TabPane}, whose skin does not build tab content until
  * the tab is shown — so a {@code lookup} on an unshown shell finds nothing, and a test written that
  * way would fail for a reason that has nothing to do with settings. That the shell includes these
@@ -42,10 +51,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest(properties = "spring.main.web-application-type=none")
 class SettingsRestoreOrderTest {
 
-    private static final String APPEARANCE_GROUP = "/fxml/ribbon/appearance-group.fxml";
+    private static final String PREFERENCES = "/fxml/preferences.fxml";
+    private static final String MODE_GROUP = "/fxml/ribbon/mode-group.fxml";
     private static final String TOOLS_GROUP = "/fxml/ribbon/tools-group.fxml";
 
-    private static final double STORED_SIM_FACTOR = -3.5;
+    /** Deliberately neither the default nor a value any control starts at. */
+    private static final double STORED_PLAYBACK_SPEED = 3.5;
+
+    /** Deliberately not the default mode, for the same reason. */
+    private static final Mode STORED_MODE = Mode.SOAP;
 
     @TempDir
     Path directory;
@@ -67,6 +81,9 @@ class SettingsRestoreOrderTest {
         HeadlessToolkit.onFxThread(AppState::markFxApplicationThread);
     }
 
+    /** Every service this test binds, so none is left listening to the shared {@link AppState}. */
+    private final List<SettingsService> bound = new ArrayList<>();
+
     /**
      * {@link AppState} is an application-lifetime singleton and this test writes to it, so it is
      * put back. Leaving state behind in a shared context is the same class of bug as leaving the
@@ -80,13 +97,12 @@ class SettingsRestoreOrderTest {
         bound.clear();
 
         HeadlessToolkit.onFxThread(() -> {
-            appState.setSimFactor(Settings.DEFAULTS.simFactor());
+            appState.setCurrentMode(Settings.DEFAULTS.mode());
+            appState.setPlaybackSpeedFactor(Settings.PLAYBACK_SPEED_DEFAULT);
             appState.setLogFolder(null);
+            appState.setPortTailMappings(List.of());
         });
     }
-
-    /** Every service this test binds, so none is left listening to the shared {@link AppState}. */
-    private final List<SettingsService> bound = new ArrayList<>();
 
     private SettingsService serviceStoring(String contents) throws IOException {
         Path file = directory.resolve("settings.properties");
@@ -99,10 +115,20 @@ class SettingsRestoreOrderTest {
         return service;
     }
 
-    private static Slider simFactorSliderOf(Parent appearanceGroup) {
-        Slider slider = (Slider) appearanceGroup.lookup("#simFactorSlider");
-        assertNotNull(slider, "the Sim Factor slider should be in the group's node tree");
-        return slider;
+    private static double playbackSpeedOf(Parent preferences) {
+        @SuppressWarnings("unchecked")
+        Spinner<Double> spinner = (Spinner<Double>) preferences.lookup("#playbackSpeedSpinner");
+        assertNotNull(spinner, "the Playback Speed spinner should be in the dialog's node tree");
+        return spinner.getValue();
+    }
+
+    private static Mode selectedModeOf(Parent modeGroup) {
+        for (Node node : modeGroup.lookupAll(".ribbon-button")) {
+            if (node instanceof ToggleButton button && button.isSelected()) {
+                return Mode.valueOf(button.getUserData().toString());
+            }
+        }
+        throw new AssertionError("no Mode toggle is selected");
     }
 
     @Test
@@ -110,15 +136,19 @@ class SettingsRestoreOrderTest {
     void restoringBeforeTheControlsAreBuiltPutsStoredValuesOnThem() throws IOException {
         String storedFolder = directory.resolve("logs").toString();
         SettingsService service = serviceStoring(
-                "simFactor=" + STORED_SIM_FACTOR + "\n"
-                        + "logFolder=" + storedFolder.replace("\\", "\\\\") + "\n");
+                "log.playbackSpeedFactor=" + STORED_PLAYBACK_SPEED + "\n"
+                        + "mode=" + STORED_MODE.storedName() + "\n"
+                        + "log.folder=" + storedFolder.replace("\\", "\\\\") + "\n");
 
         HeadlessToolkit.onFxThread(() -> {
             service.bind(appState);
 
-            assertEquals(STORED_SIM_FACTOR,
-                    simFactorSliderOf(viewLoader.loadParent(APPEARANCE_GROUP)).getValue(), 0.0001,
-                    "the slider should show the stored value, not the FXML default");
+            assertEquals(STORED_PLAYBACK_SPEED, playbackSpeedOf(viewLoader.loadParent(PREFERENCES)),
+                    0.0001, "the spinner should show the stored value, not the FXML default");
+
+            assertSame(STORED_MODE, selectedModeOf(viewLoader.loadParent(MODE_GROUP)),
+                    "the ribbon should highlight the stored mode, not the toggle marked "
+                            + "selected in the markup");
 
             Label logFolder = (Label) viewLoader.loadParent(TOOLS_GROUP).lookup("#logFolderLabel");
             assertNotNull(logFolder, "the log folder read-out should be in the group's node tree");
@@ -135,16 +165,17 @@ class SettingsRestoreOrderTest {
     @Test
     @DisplayName("restoring after the controls are built leaves them showing the default")
     void restoringAfterTheControlsAreBuiltLeavesThemShowingTheDefault() throws IOException {
-        SettingsService service = serviceStoring("simFactor=" + STORED_SIM_FACTOR + "\n");
+        SettingsService service = serviceStoring(
+                "log.playbackSpeedFactor=" + STORED_PLAYBACK_SPEED + "\n");
 
         HeadlessToolkit.onFxThread(() -> {
-            Slider slider = simFactorSliderOf(viewLoader.loadParent(APPEARANCE_GROUP));
+            Parent preferences = viewLoader.loadParent(PREFERENCES);
             service.bind(appState);
 
-            assertEquals(STORED_SIM_FACTOR, appState.getSimFactor(), 0.0001,
+            assertEquals(STORED_PLAYBACK_SPEED, appState.getPlaybackSpeedFactor(), 0.0001,
                     "the state should have been restored either way");
-            assertNotEquals(STORED_SIM_FACTOR, slider.getValue(), 0.0001,
-                    "the slider was built before the restore, so it must still show the default — "
+            assertNotEquals(STORED_PLAYBACK_SPEED, playbackSpeedOf(preferences), 0.0001,
+                    "the spinner was built before the restore, so it must still show the default — "
                             + "if this ever passes, the ordering constraint has been removed and "
                             + "the comments explaining it are stale");
         });
@@ -159,8 +190,9 @@ class SettingsRestoreOrderTest {
         HeadlessToolkit.onFxThread(() -> {
             service.bind(appState);
 
-            assertEquals(Settings.DEFAULTS.simFactor(),
-                    simFactorSliderOf(viewLoader.loadParent(APPEARANCE_GROUP)).getValue(), 0.0001);
+            assertEquals(Settings.PLAYBACK_SPEED_DEFAULT,
+                    playbackSpeedOf(viewLoader.loadParent(PREFERENCES)), 0.0001);
+            assertSame(Settings.DEFAULTS.mode(), selectedModeOf(viewLoader.loadParent(MODE_GROUP)));
 
             Label logFolder = (Label) viewLoader.loadParent(TOOLS_GROUP).lookup("#logFolderLabel");
             assertEquals("(none selected)", logFolder.getText());

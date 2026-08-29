@@ -5,8 +5,8 @@ here exist to prevent specific defects that a peer review found in earlier versi
 
 | | |
 |---|---|
-| **Describes** | `rename-to-data-blaster`, after the rename commit |
-| **Size** | ~1,180 lines of main Java, ~210 of test, 10 FXML files, one stylesheet |
+| **Describes** | `rename-to-data-blaster`, after the mode model and mode-scoped settings landed |
+| **Size** | ~2,880 lines of main Java, ~2,700 of test, 10 FXML files, one stylesheet |
 | **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (servlet), Maven |
 | **Origin** | Forked from JFXRibbon, which was written as a template. See [PRD.md](PRD.md) |
 
@@ -19,11 +19,16 @@ and a small loopback-only HTTP layer. It runs on the JavaFX Application Thread w
 `ApplicationContext` behind it, so UI components are Spring beans and can be given dependencies by
 constructor injection.
 
-**This document describes the shell as inherited, not the tool being built on it.** The four views
-behind the ribbon's Mode toggles are still placeholders; replacing them with the Log, Message, SOAP
-and REST modes — and giving each its own persisted settings — is what [PRD.md](PRD.md) specifies and
-has not been built yet. Where this document says the views are placeholders, that is still true and
-is the thing about to change.
+**The modes are real; their views and their editors are not yet.** `Mode` is a first-class enum,
+`ViewRegistry` is keyed by it, the selected mode persists, and each mode has its own block of
+persisted settings with its own namespace in the file. What has not been built is the rest of
+[PRD.md](PRD.md): the four content views are still the template's abstract placeholders behind
+correctly-labelled toggles, and Preferences is still one flat pane, so Message's type, SOAP's port
+and Log's port-to-tail table are settings that persist correctly with nowhere yet to edit them. The
+tabbed Preferences rebuild and the mode views are the next change.
+
+**None of the modes do anything.** That is deliberate and is the PRD's stated v1 boundary: v1 makes
+the modes configurable and implements no mode behaviour.
 
 The shell existed to be forked, and this is the fork. That history shapes several decisions recorded
 below: where duplication is tolerated, and where it is not.
@@ -36,7 +41,7 @@ below: where duplication is tolerated, and where it is not.
   bootstrap    Launcher · DataBlasterApplication · AppConfig · ViewLoader
                      |
                      v
-  controller   MainController · Preferences/About · View1-4
+  controller   MainController · Preferences/About · the four mode views
       |              |
       |              v
       |         ui   StageRegistry · ViewRegistry · ViewSwitcher · DialogService
@@ -55,7 +60,7 @@ imports another controller.
 | Package | Holds | Depends on |
 |---|---|---|
 | `com.culberth.tools.datablaster` | Entry points, Spring config, FXML loading | `ui`, `controller` |
-| `.model` | `AppState` — shared UI state and its off-thread projection | nothing in the app |
+| `.model` | `AppState` and its off-thread projection; `Mode`, `MessageType`, `Theme`, `PortTailMapping`; the settings record, store and service | nothing in the app |
 | `.ui` | Window ownership, view registry, view swapping, dialogs | `model` |
 | `.controller` | The shell and the content views | `ui`, `model` |
 | `.controller.ribbon` | One controller per ribbon group | `ui`, `model` |
@@ -92,9 +97,20 @@ anyway.
 
 ## 4. State and threading
 
-`AppState` is a singleton holding `simFactor`, `logFolder`, `theme`, `currentViewId` and
-`contentOpacity` as JavaFX properties. It is the only channel through which the ribbon groups, the shell and the web
+`AppState` is a singleton holding `currentMode`, `theme` and `contentOpacity`, Log mode's
+`playbackSpeedFactor`, `logFolder` and port-to-tail mappings, Message mode's `messageType` and
+SOAP's `soapPort`. It is the only channel through which the ribbon groups, the shell and the web
 layer communicate.
+
+Everything but the mappings is a JavaFX property. The mappings are an `ObservableList` — which is
+what makes them the interesting case below, because none of the rules this class enforces were
+written with a collection in mind.
+
+**The fields are flat; the persisted form is not.** `AppState` does not nest the mode-scoped values
+in per-mode holders the way `Settings` does. That is an implementation choice rather than a product
+one: a flat field is what a control binds to, and grouping them would buy a tidier class listing at
+the cost of an indirection on every read. The grouping that matters — the one a person editing the
+file sees — is in `Settings` and in the key namespaces.
 
 ### Three rules, each enforced rather than documented
 
@@ -104,7 +120,7 @@ write would run the whole listener chain — including the snapshot rebuild, whi
 properties non-atomically — on that thread.
 
 **There is no second way in.** The property accessors return `ReadOnlyDoubleProperty` and friends.
-Returning the mutable `Property` would leave `appState.currentViewIdProperty().set(...)` as an
+Returning the mutable `Property` would leave `appState.currentModeProperty().set(...)` as an
 unguarded door beside the guarded one. No call site needed changing: every reader binds, formats or
 observes.
 
@@ -112,6 +128,29 @@ observes.
 `volatile` field. `Snapshot` is deliberately narrower than `AppState` — it carries only what a
 caller outside the UI could act on, so cosmetic window-scoped values do not end up in a record the
 web layer parses.
+
+### The collection obeys the same rules, and does not get them for free
+
+Every rule above was written for scalar properties, and a collection is where each of them fails by
+default. Both halves have a test that goes red if the shortcut is taken.
+
+**`portTailMappings()` hands out an unmodifiable view, not the list.** A read-only *property*
+accessor is not enough when the thing being returned is a `List`: returning the live
+`ObservableList` would let any caller, on any thread, add an entry past both the FX-thread guard and
+the uniqueness rules. Writes go through `setPortTailMappings`, `addPortTailMapping` and
+`removePortTailMappingForPort`, which are guarded like every other mutator.
+
+**Edits replace the set rather than mutating it.** The uniqueness rules are checked against the
+complete set every time, and a rejected edit therefore cannot leave the observable list
+half-updated for whoever is watching it. It also means one change event per edit rather than a
+remove followed by an add.
+
+**The mappings are deliberately not in `Snapshot`.** Tail numbers are the most identifying data
+this tool holds, and `Snapshot` is the boundary to an HTTP API that is loopback-bound but
+unauthenticated — and loopback separates hosts, not users. Keeping the record narrow means a future
+endpoint cannot leak them by reading the record every handler already has. A handler that
+legitimately needs them can be given a second, deliberate read path. `mode` is the only field the
+modes added to it.
 
 ### The FX thread is recorded, not probed
 
@@ -152,10 +191,21 @@ previously constructed their own scenes and rendered in stock modena.
 FXML under `fxml/ribbon/` with its own controller in `controller.ribbon`, pulled in with
 `<fx:include>`.
 
-**Groups and the shell never hold each other's nodes.** The Mode group publishes a view id; the
+**Groups and the shell never hold each other's nodes.** The Mode group publishes a `Mode`; the
 shell observes it and performs the swap. The Appearance group writes `contentOpacity`; the content
 area binds to it. The obvious alternative — handing each group a reference to the content pane —
 recreates the shared-mutable-node defect that `ViewSwitcher` was made stateless to eliminate.
+
+**The toggles carry `Mode` constant names in `userData`.** Keying `ViewRegistry` by the enum turned
+half of the old free-string wiring into a compiler error; the half that remains is the markup, where
+a mode name is still just text. `ModeGroupViewIdTest` reads the FXML as XML and asserts every value
+parses to a real constant, that every constant has a toggle, and that the toggle marked
+`selected="true"` is the default mode — so a typo, a missing mode, or a default that no button
+selects fails the build rather than the button.
+
+Unlike `Mode.fromStoredName`, which falls back tolerantly because a hand-edited settings file is a
+typo to recover from, `ModeGroupController` throws on an unknown `userData`. This is the
+application's own markup, where a wrong value is a defect to surface rather than absorb.
 
 Adding a ribbon group is a new FXML, a new controller, and one `<fx:include>` line. No edit to
 `MainController`; no edit to another group.
@@ -166,15 +216,17 @@ Adding a ribbon group is a new FXML, a new controller, and one `<fx:include>` li
 shell's. A group may safely *subscribe* there, but must not *publish* — the shell has not run yet
 and will overwrite it.
 
-**Rendering current state, not transitions.** The shell renders whatever `currentViewId` already
-holds, seeding a default only when nothing is set. Relying on a change event means a second shell
-— `AppState` being a singleton — sees no transition and comes up blank.
+**Rendering current state, not transitions.** The shell renders whatever `currentMode` already
+holds. Relying on a change event means a second shell — `AppState` being a singleton — sees no
+transition and comes up blank. There is no longer a "nothing selected yet" case to seed a default
+for: `currentMode` starts at the default mode and rejects null, so the template's null branch went
+with the string it was guarding.
 
 ### Failure rolls back
 
 `ViewSwitcher` only replaces the container's children on success, and the shell restores
-`currentViewId` to the view actually on screen if a load fails. Otherwise the ribbon highlights a
-view that never rendered and `snapshot()` reports it to the web layer.
+`currentMode` to the mode actually on screen if a load fails. Otherwise the ribbon highlights a
+mode whose view never rendered and `snapshot()` reports it to the web layer.
 
 ---
 
@@ -224,14 +276,40 @@ local accounts on a shared or multi-session machine. Nothing under `/api` is aut
 
 ## 8a. Settings persistence
 
-`simFactor`, `logFolder` and `theme` survive a restart. Nothing else does — `contentOpacity` is a
-view control with a Reset button beside it, and `currentViewId` points at a placeholder.
+Everything survives a restart except `contentOpacity`, which is a view control with a Reset button
+beside it — restoring a half-transparent window would look like a rendering fault.
 
-**`theme` is deliberately absent from `AppState.Snapshot`.** That record is documented as the fields
-a caller outside the UI could meaningfully use, and which colours a window is painted in is not one
-of them. So `Settings.from` takes the `AppState` and reads it on the FX thread — where its only
-caller, a change listener, already runs — rather than widening a record whose contract says
-otherwise. That is the third key the store was told to expect.
+| Scope | Setting | Default |
+|---|---|---|
+| global | selected mode | `LOG` |
+| global | theme | `LIGHT` |
+| Log | playback speed factor (× real time, 0.1–10.0) | `1.0` |
+| Log | log folder | none |
+| Log | port → tail number mappings | empty |
+| Message | message type | `MESSAGE_1` |
+| SOAP | port | `8081` |
+
+**The selected mode persists, and used not to.** The template excluded its `currentViewId` and said
+why: the four views were placeholders, and restoring one was not behaviour a template should model.
+The views are modes now, so the reason expired and the exclusion reversed. The Javadoc that
+explained the old choice was rewritten rather than left to contradict the code.
+
+**`Settings` is a record of per-mode records** — `LogSettings`, `MessageSettings`, `SoapSettings` —
+mirroring the file's key namespaces and the Preferences tabs that are coming. A flat record would be
+a widening list of unrelated scalars whose only clue to what belongs where is a name prefix.
+
+`LogSettings` copies its mapping list into an unmodifiable, port-ordered one in its constructor
+rather than trusting callers. `Settings` is handed to a background writer thread on the strength of
+being immutable, and a record wrapping a mutable `List` is not immutable however its accessors read.
+
+**`theme` is deliberately absent from `AppState.Snapshot`,** and so are the message type, the SOAP
+port and the mappings. That record is documented as the fields a caller outside the UI could
+meaningfully use. So `Settings.from` takes the `AppState` and reads it on the FX thread — where its
+only caller, a change listener, already runs — rather than widening a record whose contract says
+otherwise.
+
+**`8081` is the SOAP default because the embedded HTTP layer binds `8080`.** Defaulting the two to
+the same port would make the out-of-box state a port conflict.
 
 Three pieces, split so the fragile part is testable on its own:
 
@@ -241,32 +319,105 @@ Three pieces, split so the fragile part is testable on its own:
 | `SettingsStore` | Files only — not `AppState`, not JavaFX. Which is why its tolerance rules can be tested against hand-written broken files with no toolkit and no context. |
 | `SettingsService` | Both. The only piece that needs either. |
 
-### Four rules
+### Five rules
 
-**Restore before the shell, not after.** The ribbon groups read their starting values from
-`AppState` in `initialize()` and never re-read them, so binding afterwards leaves the controls
-showing defaults while the state says otherwise — with nothing thrown and nothing logged.
-`SettingsRestoreOrderTest` asserts both directions.
+**Restore before the shell, not after.** Controls read their starting values from `AppState` in
+`initialize()` and never re-read them, so binding afterwards leaves them showing defaults while the
+state says otherwise — with nothing thrown and nothing logged. `SettingsRestoreOrderTest` asserts
+both directions, using the Preferences spinner and the Mode ribbon group as its subjects.
 
 **Restore, then subscribe — inside `bind()`.** The other order makes the restore look like a user
 edit and writes the file straight back on every launch. The two are one method precisely so a
-caller cannot get the order wrong.
+caller cannot get the order wrong. This applies to the mapping table as much as to the scalars: a
+collection restored after the subscription rewrites the file on every launch just as a number would.
 
-**Read tolerantly, and per value.** A missing file is a first run and is silent. Anything else falls
-back to defaults and is logged, and each value falls back on its own — a mistyped number does not
-discard a good folder path. `read()` does not throw: NFR1's argument about the HTTP layer applies
-just as much to a settings file someone has hand-edited.
+**A collection needs a `ListChangeListener`.** `bind()` subscribes to the mapping list separately
+from the properties, because a `ChangeListener` on an `ObservableList` fires only when the property
+holding the list is set to a *different* list — which never happens, the list being a final field.
+Written the obvious way, mapping edits persist silently nowhere: no exception, no log line, just a
+table that is empty again on the next launch. `flushOnShutdown()` unregisters it along with the
+rest; every subscription `bind()` makes is one the shutdown has to undo.
 
-**Write off the FX thread, coalesced.** A slider drag fires a change per step, so the writer holds
-only the latest value and a burst collapses into as few writes as the disk can take. The snapshot is
-taken on the FX thread — `AppState.snapshot()` exists for exactly this — and a `@PreDestroy` flush
-stops a change made just before quitting from being lost to a daemon thread.
+**Read tolerantly, per value, and — for the mappings — per entry.** A missing file is a first run
+and is silent. Anything else falls back to defaults and is logged, and each value falls back on its
+own: a mistyped number does not discard a good folder path, and one malformed mapping does not
+discard the other nineteen. `read()` does not throw — the argument that the HTTP layer must not be
+able to prevent launch applies just as much to a settings file someone has hand-edited.
+
+**Write off the FX thread, coalesced.** A control that fires on every step of a drag would otherwise
+mean a file per step, so the writer holds only the latest value and a burst collapses into as few
+writes as the disk can take. What crosses to the writer is an immutable `Settings` captured at the
+moment of the change — including a copy of the mapping set, since handing the writer the live
+observable list would put a collection the FX thread is still editing under a background reader. A
+`@PreDestroy` flush stops a change made just before quitting from being lost to a daemon thread.
+
+### The playback speed factor, and why its key was renamed
+
+The template's Sim Factor was a `double` on a −5.0…5.0 slider with a default of `0.0`. It is now
+Log mode's Playback Speed Factor: a multiplier on real time, `1.0` being real time, valid over
+0.1–10.0 with a default of `1.0`.
+
+**The out-of-range value is rejected, not clamped.** Clamping `0.0` up to `0.1` would start playback
+crawling and report nothing; falling back to `1.0` with a log line says what happened. Both ends
+name a behaviour the setting does not offer — `0.0` is frozen, a negative is reverse.
+
+**The key moved from `simFactor` to `log.playbackSpeedFactor`, and that is what defuses the default
+change.** Had the key been reused, an existing file holding `simFactor=0.0` would have restored as a
+perfectly well-formed `0.0` — frozen playback, no warning, nothing out of range, because `0.0` *was*
+the valid default under the old semantics. Because the key is new, the old spelling is simply an
+unknown key and the new default applies. `SettingsStoreTest` pins that.
+
+**The store validates the range; the control chooses the step.** A value between the spinner's
+increments is still a legal setting, so `0.25` is typeable even though the arrows move by `0.1` —
+otherwise a convenient step size quietly becomes a validation rule.
+
+`Settings.SIM_FACTOR_MIN`/`MAX` were renamed to `PLAYBACK_SPEED_MIN`/`MAX` rather than re-pointed in
+place. The constants are read by both the store's range check and the spinner's bounds, and leaving
+a stale name on a changed meaning is how those two drift into disagreeing.
+
+### Port-to-tail mappings
+
+A tail number is **exactly six alphanumeric characters, upper-cased**: `N12345` and `123456` are
+both valid, `N` has no special status, and the length is exact rather than a maximum. That is
+stricter than any real registration rule, which is where its typo-catching value is.
+
+**It is a `String`, despite being allowed to look like a number.** An integer type turns `000042`
+into `42` on the first round-trip and cannot hold `N12345` at all.
+
+**No instance can be invalid.** The canonical constructor normalises and validates, so there is no
+back door around the factory — and normalising *there* rather than only in `of` is what makes the
+uniqueness check meaningful, since `n12345` and `N12345` are otherwise different strings.
+
+**Ports and tails are each unique, and the two are enforced in different places.** Port uniqueness
+is a property of the file format — `log.mapping.<port>` is a key, and a properties file cannot hold
+a key twice — so no read-path check has to be remembered. Tail uniqueness is the direction the
+format cannot enforce, so it is checked in code. The one hole the format leaves is a port spelled
+two ways (`80` and `080`), which the reader catches by resolving keys to ports in a first pass.
+
+The reader takes two passes for that reason and one more: `Properties`' iteration order is
+unspecified, so walking ports in ascending order is what makes "which of two mappings sharing a tail
+survives" a fact about the file rather than about the hash order of the day.
+
+This rejects hyphenated foreign registrations — `G-ABCD` is six characters only if the hyphen
+counts. That follows from the rule as specified rather than being a decision about non-US aircraft;
+if such tails turn up it is one character in the pattern plus a test. Flagged rather than allowed
+pre-emptively, because a character class that also accepts `------` has stopped validating anything.
 
 ### Two surfaces, one value
 
-Sim Factor and the log folder appear both in the ribbon and in Preferences. Neither holds a copy —
+The log folder appears both in the ribbon's Tools group and in Preferences. Neither holds a copy —
 both read from and write to `AppState`, and both read-outs are *bound* rather than assigned, so they
 track it without being rebuilt.
+
+It is the only setting in both places now. Playback Speed Factor left the ribbon with the Appearance
+group's slider, for two reasons: it is a Log-mode setting rather than an appearance one, and as a
+multiplier over 0.1–10.0 it is not a slider at all — a linear track puts `1.0`, the default and the
+value most returned to, at 9% of its travel with the entire slow-motion range crushed to the left of
+it. It is a `Spinner<Double>` in Preferences, which takes an exact value and suits a setting
+configured once rather than scrubbed live. If quick access is ever wanted on the ribbon it belongs
+in a mode-aware group, on a log scale.
+
+The Appearance group is left with content opacity, which is not persisted at all.
 
 Preferences applies edits immediately and closes with **Close**, not OK/Cancel. That is not a
 shortcut: a Cancel needs somewhere to hold uncommitted edits, and that buffer is a second copy of
@@ -319,35 +470,64 @@ A properties file under the platform's per-user config location (`%APPDATA%` on 
 `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere), UTF-8, read
 with a leading byte-order mark skipped.
 
+```properties
+mode=log
+theme=dark
+
+log.playbackSpeedFactor=1.5
+log.folder=C:\\logs\\capture
+log.mapping.5001=N12345
+log.mapping.5002=N7377X
+log.mapping.5003=123456
+
+message.type=MESSAGE_2
+
+soap.port=8081
+```
+
 `java.util.prefs.Preferences` was the alternative and is rejected on purpose: on Windows it writes
-to the registry, and for a template whose deliverable is that a reader can see what it does, "where
-did my setting go" should be answerable with a file manager.
+to the registry, and the point of a plain file is that "where did my setting go" is answerable with
+a file manager.
+
+**Keys are namespaced, not nested.** `Properties` is flat, so `log.mapping.5001` is one key with
+dots in it, and reading the mapping set means filtering `stringPropertyNames()` by prefix rather
+than calling a fixed getter. That is a different read shape from the rest of the file and has its
+own tests.
+
+**`theme` keeps its unprefixed key** — along with `mode`, it is not mode-scoped. `simFactor` and
+`logFolder` moved under `log.` and their old spellings are simply unknown keys, which the store
+already ignores.
+
+**Old keys are not migrated, deliberately.** The version is unreleased and single-user, so a missing
+key falling back silently is the whole migration story the per-key tolerant read already implements.
 
 **The BOM handling is not defensive padding.** Windows Notepad's "UTF-8" and PowerShell's
 `Set-Content -Encoding utf8` both write one, `Properties` does not treat it as whitespace, and it
 therefore joins the *first* key — so exactly one setting goes silently missing while the rest of the
-file loads correctly. Found by hand-editing the real settings file and watching Sim Factor come back
-as 0.0 while the log folder on the next line restored perfectly.
+file loads correctly. Found by hand-editing the real settings file and watching the first value come
+back as its default while the log folder on the next line restored perfectly.
 
 ---
 
 ## 9. Testing
 
-110 tests, no display required. Run on Linux and Windows for every push — see §10.
+209 tests, no display required. Run on Linux and Windows for every push — see §10.
 
 | Suite | Covers | Toolkit |
 |---|---|---|
-| `AppStateTest` | Snapshot derivation and freshness, the off-thread rejection contract, and — by reflection — that the accessors stay read-only | no |
+| `AppStateTest` | Snapshot derivation and freshness, the off-thread rejection contract, and — by reflection — that the accessors stay read-only. Plus the collection's own versions of all three: the mapping mutators are guarded, the handed-out list is unmodifiable, an edit is one change event, and the mappings are absent from `Snapshot` | no |
+| `PortTailMappingTest` | The tail format, the port range, and uniqueness in both directions — including that two tails differing only in case collide rather than both being accepted | no |
+| `StoredEnumParsingTest` | The tolerant-parse contract `Theme`, `Mode` and `MessageType` share: every constant round-trips, unknown values fall back rather than throwing, and the stored form is not the shown form | no |
 | `LoopbackHostFilterTest` | 24 host vectors, including the suffix attacks (`localhost.evil.example`) that a refactor to `startsWith` would silently open | no |
-| `ViewRegistryTest` | Resolution, defaults, and the unknown-id message | no |
+| `ViewRegistryTest` | That every `Mode` resolves to a view, that no two share one, and the miss message | no |
 | `StatusControllerTest` | Payload shape, and that it avoids Actuator's vocabulary | no |
 | `SpringContextTest` | That the context starts, that every controller under `controller` is prototype-scoped, and that the shared services are not | no |
-| `ModeGroupViewIdTest` | That every `userData` view id declared in the ribbon resolves through `ViewRegistry`, read from the FXML as XML | no |
+| `ModeGroupViewIdTest` | That every `userData` in the ribbon names a real `Mode`, that every `Mode` has a toggle, that each resolves through `ViewRegistry`, and that the toggle marked selected is the default mode — read from the FXML as XML | no |
 | `FxmlSmokeTest` | That all ten FXML files load through the real Spring-backed controller factory | **yes** |
-| `SettingsStoreTest` | The tolerance rules, against hand-written files: missing, corrupt, out of range, BOM-prefixed, non-ASCII | no |
-| `SettingsServiceTest` | Restore, coalesced writes, the shutdown flush, and that binding does not write back what it just read | no |
-| `SettingsRestoreOrderTest` | That restoring *before* the controls are built is what puts stored values on them — including the negative case | **yes** |
-| `PreferencesSurfaceTest` | That Preferences and the ribbon are two views of one value: the dialog reads live state, writes through it, and both read-outs track it without a reopen | **yes** |
+| `SettingsStoreTest` | The tolerance rules, against hand-written files: missing, corrupt, out of range, BOM-prefixed, non-ASCII, plus the mapping table entry by entry (bad port, bad tail, duplicate tail, a port spelled two ways) and that the template's keys are unknown keys | no |
+| `SettingsServiceTest` | Restore of every mode's settings, coalesced writes, the shutdown flush, that binding does not write back what it just read, and that a mapping edit persists at all | no |
+| `SettingsRestoreOrderTest` | That restoring *before* the controls are built is what puts stored values on them — including the negative case. Its subjects are the Preferences spinner and the Mode ribbon group, both of which read `AppState` once in `initialize()` | **yes** |
+| `PreferencesSurfaceTest` | That Preferences reads live state and writes through it rather than holding a copy, that the log-folder read-outs in both surfaces track it without a reopen, that the spinner's bounds come from the store's constants, that Reset touches only what the dialog shows, and that the Appearance group carries no persisted setting | **yes** |
 | `ThemeContrastTest` | Every on-screen colour pair in **both** themes, parsed from `ribbon.css`, against 4.5:1 for text and 3:1 for focus indicators | no |
 | `ThemeSwitchingTest` | That switching restyles windows that are **already open**, not only the next one created | **yes** |
 
@@ -359,9 +539,13 @@ They have come apart, and only one of them is a requirement:
 - **No display required (NFR7) — still true, and now proven.** `FxmlSmokeTest` runs on Monocle's
   software-only Glass platform via `HeadlessToolkit`. The Linux CI runner has no display, so this
   is checked by a machine rather than asserted here.
-- **No toolkit initialized — now narrowed** to "initialized only by `FxmlSmokeTest`." Every other
-  suite must stay toolkit-free. `AppStateTest` matters most: recording the FX thread instead of
-  probing it (§4) exists precisely so that class never pulls in native libraries, and calling
+- **No toolkit initialized — now narrowed** to the four suites that genuinely need a scene graph:
+  `FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest` and `ThemeSwitchingTest`.
+  Every other suite must stay toolkit-free, and the model layer in particular has no excuse — the
+  mode enums, the mapping rules and the whole settings store are testable without one, which is why
+  `PortTailMappingTest` and `StoredEnumParsingTest` are in the "no" column despite covering rules a
+  UI will enforce. `AppStateTest` matters most: recording the FX thread instead of probing it (§4)
+  exists precisely so that class never pulls in native libraries, and calling
   `HeadlessToolkit.start()` from it would undo that for no gain.
 
 ### Why the FXML tests need to load rather than inspect

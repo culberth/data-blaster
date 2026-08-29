@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.culberth.tools.datablaster.HeadlessToolkit;
 import com.culberth.tools.datablaster.ViewLoader;
 import com.culberth.tools.datablaster.model.AppState;
+import com.culberth.tools.datablaster.model.Settings;
 import com.culberth.tools.datablaster.model.Theme;
 import com.culberth.tools.datablaster.ui.LogFolderChooser;
 import java.io.File;
@@ -17,7 +18,8 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -27,13 +29,17 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
 /**
- * That Preferences and the ribbon are two views of one value, not two values.
+ * That Preferences and the ribbon are views of one value, not two values.
  *
  * <p>Peer review #27 was about a user opening the only thing called Preferences and finding
  * nothing. The fix could easily have introduced the worse problem: a dialog holding its own copy of
  * a setting, agreeing with the ribbon right up until it did not. These tests exist to keep that
- * from happening quietly — every assertion here is about the two surfaces sharing
- * {@link AppState} rather than mirroring each other.
+ * from happening quietly — every assertion here is about the surfaces sharing {@link AppState}
+ * rather than mirroring each other.
+ *
+ * <p>The log folder is now the only setting shown in both places, since Playback Speed Factor left
+ * the ribbon along with the Appearance group's slider. The dialog is still checked against the
+ * shared state directly, which is the property that mattered.
  */
 @SpringBootTest(properties = "spring.main.web-application-type=none")
 class PreferencesSurfaceTest {
@@ -60,46 +66,62 @@ class PreferencesSurfaceTest {
     @AfterEach
     void resetSharedState() {
         HeadlessToolkit.onFxThread(() -> {
-            appState.setSimFactor(0.0);
+            appState.setPlaybackSpeedFactor(Settings.PLAYBACK_SPEED_DEFAULT);
             appState.setLogFolder(null);
             appState.setTheme(Theme.LIGHT);
         });
     }
 
-    private static Slider simFactorSlider(Parent root) {
-        Slider slider = (Slider) root.lookup("#simFactorSlider");
-        assertNotNull(slider, "the Sim Factor slider should be in the node tree");
-        return slider;
+    @SuppressWarnings("unchecked")
+    private static Spinner<Double> playbackSpeedSpinner(Parent root) {
+        Spinner<Double> spinner = (Spinner<Double>) root.lookup("#playbackSpeedSpinner");
+        assertNotNull(spinner, "the Playback Speed spinner should be in the node tree");
+        return spinner;
     }
 
     @Test
-    @DisplayName("Preferences opens showing the value the ribbon last set")
-    void preferencesOpensShowingTheValueTheRibbonLastSet() {
+    @DisplayName("Preferences opens showing the live state, not the FXML default")
+    void preferencesOpensShowingTheLiveState() {
         HeadlessToolkit.onFxThread(() -> {
-            Slider ribbonSlider = simFactorSlider(viewLoader.loadParent(APPEARANCE_GROUP));
-            ribbonSlider.setValue(1.5);
+            appState.setPlaybackSpeedFactor(1.5);
 
             Parent preferences = viewLoader.loadParent(PREFERENCES);
 
-            assertEquals(1.5, simFactorSlider(preferences).getValue(), 0.0001,
-                    "the dialog should read the live state, not the FXML default");
-            assertEquals("1.5", ((Label) preferences.lookup("#simFactorValueLabel")).getText());
+            assertEquals(1.5, playbackSpeedSpinner(preferences).getValue(), 0.0001,
+                    "the dialog should read the live state, not a value baked into the markup");
         });
     }
 
     @Test
-    @DisplayName("editing in Preferences reaches the ribbon through AppState")
-    void editingInPreferencesReachesTheRibbonThroughAppState() {
+    @DisplayName("editing in Preferences writes through to the shared state")
+    void editingInPreferencesWritesThroughToTheSharedState() {
         HeadlessToolkit.onFxThread(() -> {
             Parent preferences = viewLoader.loadParent(PREFERENCES);
 
-            simFactorSlider(preferences).setValue(-4.0);
+            playbackSpeedSpinner(preferences).getValueFactory().setValue(4.0);
 
-            assertEquals(-4.0, appState.getSimFactor(), 0.0001,
+            assertEquals(4.0, appState.getPlaybackSpeedFactor(), 0.0001,
                     "the dialog must write through to the shared state");
-            // A ribbon built afterwards reads that same state — which is the whole claim.
-            assertEquals(-4.0, simFactorSlider(viewLoader.loadParent(APPEARANCE_GROUP)).getValue(),
-                    0.0001);
+        });
+    }
+
+    /**
+     * The control's bounds and the store's range check read from the same constants, so a spinner
+     * cannot offer a value that the store would then reject on the next launch — which would look
+     * to the user like a setting that silently refuses to stick.
+     */
+    @Test
+    @DisplayName("the spinner cannot offer a value the store would reject")
+    void theSpinnerCannotOfferAValueTheStoreWouldReject() {
+        HeadlessToolkit.onFxThread(() -> {
+            Parent preferences = viewLoader.loadParent(PREFERENCES);
+            SpinnerValueFactory<Double> factory =
+                    playbackSpeedSpinner(preferences).getValueFactory();
+
+            SpinnerValueFactory.DoubleSpinnerValueFactory bounded =
+                    (SpinnerValueFactory.DoubleSpinnerValueFactory) factory;
+            assertEquals(Settings.PLAYBACK_SPEED_MIN, bounded.getMin(), 0.0001);
+            assertEquals(Settings.PLAYBACK_SPEED_MAX, bounded.getMax(), 0.0001);
         });
     }
 
@@ -130,25 +152,49 @@ class PreferencesSurfaceTest {
     }
 
     @Test
-    @DisplayName("Reset to defaults clears both settings and then disables itself")
-    void resetToDefaultsClearsBothSettingsAndThenDisablesItself() {
+    @DisplayName("Reset to defaults clears the settings it shows and then disables itself")
+    void resetToDefaultsClearsTheSettingsItShowsAndThenDisablesItself() {
         HeadlessToolkit.onFxThread(() -> {
             Parent preferences = viewLoader.loadParent(PREFERENCES);
             Button reset = (Button) preferences.lookup("#resetButton");
             assertNotNull(reset);
             assertTrue(reset.isDisabled(), "nothing to reset when everything is already default");
 
-            simFactorSlider(preferences).setValue(2.0);
+            playbackSpeedSpinner(preferences).getValueFactory().setValue(2.0);
             appState.setLogFolder(new File(System.getProperty("java.io.tmpdir")));
             assertFalse(reset.isDisabled(), "Reset should become available once something differs");
 
             reset.fire();
 
-            assertEquals(0.0, appState.getSimFactor(), 0.0001);
+            assertEquals(Settings.PLAYBACK_SPEED_DEFAULT, appState.getPlaybackSpeedFactor(), 0.0001);
             assertNull(appState.getLogFolder());
-            assertEquals(0.0, simFactorSlider(preferences).getValue(), 0.0001,
+            assertEquals(Settings.PLAYBACK_SPEED_DEFAULT,
+                    playbackSpeedSpinner(preferences).getValue(), 0.0001,
                     "the control must follow, not just the state behind it");
             assertTrue(reset.isDisabled(), "back at defaults, so there is nothing left to reset");
+        });
+    }
+
+    /**
+     * Reset touches what the dialog shows and nothing else. Clearing a mapping table someone typed
+     * by hand is a different act from putting a spinner back, and it gets its own confirmation when
+     * the Log tab that owns it exists.
+     */
+    @Test
+    @DisplayName("Reset to defaults does not clear settings the dialog does not show")
+    void resetToDefaultsDoesNotClearSettingsTheDialogDoesNotShow() {
+        HeadlessToolkit.onFxThread(() -> {
+            appState.setPortTailMappings(java.util.List.of(
+                    com.culberth.tools.datablaster.model.PortTailMapping.of(5001, "N12345")));
+            appState.setLogFolder(new File(System.getProperty("java.io.tmpdir")));
+
+            Parent preferences = viewLoader.loadParent(PREFERENCES);
+            ((Button) preferences.lookup("#resetButton")).fire();
+
+            assertEquals(1, appState.portTailMappings().size(),
+                    "the mapping table is not on this surface and must not be cleared by its reset");
+
+            appState.setPortTailMappings(java.util.List.of());
         });
     }
 
@@ -164,9 +210,8 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * R5's control lands here rather than in the ribbon, because a persisted theme is a setting and
-     * this is where settings live — the rule R1 established. Wired the same one-way way as the
-     * slider: read the live value, write changes through.
+     * A persisted theme is a setting, and this is where settings live. Wired the same one-way way
+     * as the spinner: read the live value, write changes through.
      */
     @Test
     @DisplayName("the theme chooser reads and writes the shared state")
@@ -199,6 +244,26 @@ class PreferencesSurfaceTest {
 
             assertNull(preferences.lookup("#opacitySlider"),
                     "opacity is a view control, not a persisted setting");
+        });
+    }
+
+    /**
+     * The mirror of the rule above: the Appearance group is now opacity only. Playback Speed Factor
+     * is a Log-mode setting rather than an appearance one, and as a multiplier over 0.1-10.0 it is
+     * not a linear slider either — 1.0 would sit at 9% of the track.
+     */
+    @Test
+    @DisplayName("the Appearance group carries no persisted setting")
+    void theAppearanceGroupCarriesNoPersistedSetting() {
+        HeadlessToolkit.onFxThread(() -> {
+            Parent appearance = viewLoader.loadParent(APPEARANCE_GROUP);
+
+            assertNull(appearance.lookup("#simFactorSlider"),
+                    "the template's Sim Factor slider should be gone, not renamed in place");
+            assertNull(appearance.lookup("#playbackSpeedSpinner"),
+                    "Playback Speed Factor belongs in Preferences, not the Appearance group");
+            assertNotNull(appearance.lookup("#opacitySlider"),
+                    "opacity is what the group is left with");
         });
     }
 }

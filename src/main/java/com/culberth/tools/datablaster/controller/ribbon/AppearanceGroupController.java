@@ -11,24 +11,19 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 /**
- * The "Appearance" ribbon group: the Sim Factor preference and the content opacity. Both are
- * written to {@link AppState}; the content area observes the opacity there rather than being
- * bound to this group's slider directly.
+ * The "Appearance" ribbon group: the content opacity. It is written to {@link AppState}; the
+ * content area observes it there rather than being bound to this group's slider directly.
+ *
+ * <p>Opacity is the only thing left here, and it is deliberately not a persisted setting — it is a
+ * view control with a Reset beside it. The template's Sim Factor slider that used to share this
+ * group became Log mode's Playback Speed Factor and moved to Preferences; see the group's FXML for
+ * why it is not a slider any more.
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class AppearanceGroupController {
 
     private static final double OPACITY_DEFAULT = 1.0;
-
-    @FXML
-    private Label simFactorCaption;
-
-    @FXML
-    private Slider simFactorSlider;
-
-    @FXML
-    private Label simFactorValueLabel;
 
     @FXML
     private Label opacityCaption;
@@ -50,17 +45,10 @@ public class AppearanceGroupController {
 
     @FXML
     private void initialize() {
-        // Set here, not in the FXML: labelFor="$simFactorSlider" on the caption would be a forward
+        // Set here, not in the FXML: labelFor="$opacitySlider" on the caption would be a forward
         // reference to an fx:id declared further down the file, which FXMLLoader resolves to null
         // without erroring — markup that asserts an association it does not actually make.
-        simFactorCaption.setLabelFor(simFactorSlider);
         opacityCaption.setLabelFor(opacitySlider);
-
-        simFactorSlider.setValue(appState.getSimFactor());
-        simFactorSlider.valueProperty().addListener(
-                (obs, oldValue, newValue) -> appState.setSimFactor(newValue.doubleValue()));
-        simFactorValueLabel.textProperty().bind(
-                Bindings.format("%.1f", appState.simFactorProperty()));
 
         // The read-out and Reset exist because dragging to 0.3 leaves content at roughly 1.9:1
         // contrast, and without a numeric value or a default there is no way back but by eye.

@@ -1,15 +1,23 @@
 package com.culberth.tools.datablaster.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javafx.collections.ListChangeListener;
+import javafx.collections.ObservableList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -40,23 +48,25 @@ class AppStateTest {
         AppState.forgetFxApplicationThread();
     }
 
+    // --- the snapshot -------------------------------------------------------------------------
+
     @Test
     void initialSnapshotIsDerivedFromThePropertyDefaults() {
         AppState.Snapshot snapshot = appState.snapshot();
         assertNotNull(snapshot);
-        assertEquals(0.0, snapshot.simFactor());
+        assertSame(Mode.LOG, snapshot.mode());
+        assertEquals(1.0, snapshot.playbackSpeedFactor());
         assertNull(snapshot.logFolderPath());
-        assertNull(snapshot.currentViewId());
     }
 
     @Test
     void snapshotReflectsAWriteRatherThanBeingStale() {
         // Not snapshot()==snapshot(): that would pass even if snapshot() returned null.
-        appState.setCurrentViewId("view3");
-        appState.setSimFactor(2.5);
+        appState.setCurrentMode(Mode.SOAP);
+        appState.setPlaybackSpeedFactor(2.5);
         AppState.Snapshot snapshot = appState.snapshot();
-        assertEquals("view3", snapshot.currentViewId());
-        assertEquals(2.5, snapshot.simFactor());
+        assertSame(Mode.SOAP, snapshot.mode());
+        assertEquals(2.5, snapshot.playbackSpeedFactor());
     }
 
     @Test
@@ -65,30 +75,169 @@ class AppStateTest {
         assertEquals(3, AppState.Snapshot.class.getRecordComponents().length);
     }
 
+    /**
+     * Tail numbers are the most identifying data this tool holds, and {@code Snapshot} is the
+     * boundary to a loopback-bound but unauthenticated HTTP API. Loopback separates hosts, not
+     * users, so a future endpoint must not be able to reach them by reading the record every
+     * handler already has.
+     */
+    @Test
+    @DisplayName("the mapping table is not reachable through the snapshot")
+    void theMappingTableIsNotReachableThroughTheSnapshot() {
+        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+
+        for (var component : AppState.Snapshot.class.getRecordComponents()) {
+            assertFalse(component.getName().toLowerCase().contains("mapping")
+                            || component.getName().toLowerCase().contains("tail"),
+                    "Snapshot must not carry the mapping table, but has " + component.getName());
+        }
+    }
+
+    // --- the thread guard ---------------------------------------------------------------------
+
     @Test
     void mutatingOffTheFxThreadFailsLoudlyRatherThanRacing() throws Exception {
-        assertThrowsOffThread(() -> appState.setSimFactor(1.5));
-        assertThrowsOffThread(() -> appState.setCurrentViewId("view2"));
+        assertThrowsOffThread(() -> appState.setPlaybackSpeedFactor(1.5));
+        assertThrowsOffThread(() -> appState.setCurrentMode(Mode.MESSAGE));
         assertThrowsOffThread(() -> appState.setLogFolder(new File(".")));
         assertThrowsOffThread(() -> appState.setContentOpacity(0.5));
+        assertThrowsOffThread(() -> appState.setMessageType(MessageType.MESSAGE_2));
+        assertThrowsOffThread(() -> appState.setSoapPort(9000));
+    }
+
+    /**
+     * The collection is the easy one to leave unguarded — it is not a property, so it does not go
+     * through a setter unless one is written for it.
+     */
+    @Test
+    @DisplayName("the mapping mutators are guarded like every other one")
+    void theMappingMutatorsAreGuardedLikeEveryOtherOne() throws Exception {
+        assertThrowsOffThread(() -> appState.addPortTailMapping(PortTailMapping.of(5001, "N12345")));
+        assertThrowsOffThread(() -> appState.setPortTailMappings(List.of()));
+        assertThrowsOffThread(() -> appState.removePortTailMappingForPort(5001));
     }
 
     @Test
     void theThreadingFailureNamesTheEscapeHatch() throws Exception {
-        Throwable thrown = assertThrowsOffThread(() -> appState.setSimFactor(1.5));
+        Throwable thrown = assertThrowsOffThread(() -> appState.setPlaybackSpeedFactor(1.5));
         assertTrue(thrown.getMessage().contains("onFxThread"), thrown.getMessage());
     }
+
+    // --- no second way in ---------------------------------------------------------------------
 
     @Test
     void propertyAccessorsExposeNoSetter() throws Exception {
         // The guard would be pointless if a caller could reach the mutable property instead —
         // this pins the accessors' return types as read-only.
         for (String accessor : new String[] {
-                "simFactorProperty", "logFolderProperty", "contentOpacityProperty", "currentViewIdProperty"}) {
+                "currentModeProperty", "playbackSpeedFactorProperty", "logFolderProperty",
+                "contentOpacityProperty", "messageTypeProperty", "soapPortProperty",
+                "themeProperty"}) {
             Class<?> returned = AppState.class.getMethod(accessor).getReturnType();
             assertTrue(returned.getSimpleName().startsWith("ReadOnly"),
                     accessor + " returns " + returned.getSimpleName());
         }
+    }
+
+    /**
+     * The collection equivalent of the rule above, and the one the obvious implementation gets
+     * wrong: handing out the live {@code ObservableList} would let any caller, on any thread, add
+     * an entry past both the guard and the uniqueness rules.
+     */
+    @Test
+    @DisplayName("the mapping table is handed out unmodifiable")
+    void theMappingTableIsHandedOutUnmodifiable() {
+        // Populated first, deliberately: clear() and remove() on an empty list are no-ops that
+        // throw nothing, so an empty fixture would let a fully mutable list pass this test.
+        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+        ObservableList<PortTailMapping> mappings = appState.portTailMappings();
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> mappings.add(PortTailMapping.of(5002, "123456")));
+        assertThrows(UnsupportedOperationException.class, () -> mappings.remove(0));
+        assertThrows(UnsupportedOperationException.class, mappings::clear);
+        assertEquals(1, mappings.size(), "none of that should have got through");
+    }
+
+    // --- the mapping table --------------------------------------------------------------------
+
+    @Test
+    @DisplayName("the view tracks the state it is a view of")
+    void theViewTracksTheStateItIsAViewOf() {
+        ObservableList<PortTailMapping> mappings = appState.portTailMappings();
+        assertTrue(mappings.isEmpty());
+
+        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+
+        // Unmodifiable, but not a detached copy — a table bound to it must see later edits.
+        assertEquals(1, mappings.size());
+        assertEquals("N12345", mappings.get(0).tail());
+    }
+
+    @Test
+    @DisplayName("a mapping can be removed by its port")
+    void aMappingCanBeRemovedByItsPort() {
+        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+        appState.addPortTailMapping(PortTailMapping.of(5002, "123456"));
+
+        assertTrue(appState.removePortTailMappingForPort(5001));
+        assertEquals(List.of(PortTailMapping.of(5002, "123456")), appState.portTailMappings());
+
+        assertFalse(appState.removePortTailMappingForPort(9999),
+                "removing a port that is not mapped is not an error, but it is not a change either");
+    }
+
+    @Test
+    @DisplayName("a colliding mapping is rejected and changes nothing")
+    void aCollidingMappingIsRejectedAndChangesNothing() {
+        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> appState.addPortTailMapping(PortTailMapping.of(5001, "123456")));
+        assertThrows(IllegalArgumentException.class,
+                () -> appState.addPortTailMapping(PortTailMapping.of(5002, "n12345")));
+
+        assertEquals(List.of(PortTailMapping.of(5001, "N12345")), appState.portTailMappings(),
+                "a rejected edit must leave the table exactly as it was");
+    }
+
+    /**
+     * One event per edit, not a remove followed by an add. A subscriber that persists on every
+     * change would otherwise write twice for one edit, and a table would flicker its selection.
+     */
+    @Test
+    @DisplayName("an edit is published as a single change")
+    void anEditIsPublishedAsASingleChange() {
+        AtomicInteger changes = new AtomicInteger();
+        ListChangeListener<PortTailMapping> counter = change -> changes.incrementAndGet();
+        appState.portTailMappings().addListener(counter);
+
+        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+        assertEquals(1, changes.get());
+
+        appState.removePortTailMappingForPort(5001);
+        assertEquals(2, changes.get());
+
+        appState.portTailMappings().removeListener(counter);
+    }
+
+    // --- the values that are not allowed to be absent or absurd -------------------------------
+
+    @Test
+    @DisplayName("there is no no-mode state")
+    void thereIsNoNoModeState() {
+        assertThrows(IllegalArgumentException.class, () -> appState.setCurrentMode(null));
+        assertThrows(IllegalArgumentException.class, () -> appState.setMessageType(null));
+    }
+
+    @Test
+    @DisplayName("the SOAP port is range-checked where a control writes it")
+    void theSoapPortIsRangeCheckedWhereAControlWritesIt() {
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapPort(0));
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapPort(65536));
+
+        appState.setSoapPort(65535);
+        assertEquals(65535, appState.getSoapPort());
     }
 
     /** Runs {@code mutation} on a non-FX thread and returns the exception it threw. */

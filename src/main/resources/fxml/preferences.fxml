@@ -5,18 +5,22 @@
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Separator?>
-<?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.Spinner?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
 <!--
-  The canonical surface for the settings that persist. Both controls also exist in the ribbon for
-  quick access, and both write the same AppState — there is no second copy of the values here.
+  The canonical surface for the settings that persist. Every control here writes the same AppState
+  the ribbon does — there is no second copy of the values.
 
   Edits apply immediately, so the button is Close rather than OK/Cancel: a Cancel would need
   somewhere to hold uncommitted edits, and that buffer is exactly the duplicated state this dialog
   was reworked to remove. Reset to defaults is the way back.
+
+  Still one flat pane. Message mode's type, SOAP's port and Log's port-to-tail table are settings
+  with nowhere yet to be edited; the tabbed rebuild (General / Log / Message / SOAP) is the next
+  change, and this file is what it replaces.
 -->
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
@@ -41,20 +45,24 @@
                styleClass="dialog-hint" wrapText="true"/>
     </VBox>
 
-    <!-- Sim Factor -->
+    <!--
+      Playback Speed Factor. A Spinner rather than a Slider: the value is a multiplier over
+      0.1-10.0, and a linear track strands 1.0 - the default, and the value most returned to - at
+      9% of its travel, with every slow-motion setting crushed to the left of it. A spinner takes
+      an exact value and suits a setting configured once rather than scrubbed live.
+
+      The value factory's bounds and step are set in the controller, from the constants the store
+      range-checks against, so the control and the validator cannot drift apart.
+    -->
     <VBox spacing="4">
-        <Label fx:id="simFactorCaption" text="Sim _Factor" mnemonicParsing="true"
+        <Label fx:id="playbackSpeedCaption" text="Playback Speed _Factor" mnemonicParsing="true"
                styleClass="dialog-field-label"/>
         <HBox spacing="10" alignment="CENTER_LEFT">
-            <Slider fx:id="simFactorSlider" accessibleText="Sim Factor"
-                    min="-5.0" max="5.0" value="0.0"
-                    majorTickUnit="2.5" minorTickCount="4" blockIncrement="0.1"
-                    snapToTicks="true" showTickMarks="true" showTickLabels="true"
-                    HBox.hgrow="ALWAYS"/>
-            <Label fx:id="simFactorValueLabel" text="0.0" styleClass="dialog-readout"
-                   minWidth="34" alignment="CENTER_RIGHT"/>
+            <Spinner fx:id="playbackSpeedSpinner" editable="true" prefWidth="110"
+                     accessibleText="Playback speed factor"/>
+            <Label text="× real time" styleClass="dialog-hint"/>
         </HBox>
-        <Label text="Stands in for a user preference. Persisted; restored on the next launch."
+        <Label text="1.0 is real time; 2.0 is twice as fast, 0.5 is half speed. Used by Log mode."
                styleClass="dialog-hint" wrapText="true"/>
     </VBox>
 

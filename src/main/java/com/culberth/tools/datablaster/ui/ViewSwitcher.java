@@ -1,13 +1,14 @@
 package com.culberth.tools.datablaster.ui;
 
 import com.culberth.tools.datablaster.ViewLoader;
+import com.culberth.tools.datablaster.model.Mode;
 import java.io.IOException;
 import javafx.scene.Parent;
 import javafx.scene.layout.Pane;
 import org.springframework.stereotype.Component;
 
 /**
- * Swaps the content view inside a host pane. Which view is current is recorded in
+ * Swaps the content view inside a host pane. Which mode is current is recorded in
  * {@code AppState} by whoever requests the change; this class only performs the swap.
  *
  * <p>This is a stateless singleton on purpose: the host pane is passed in per call rather than
@@ -26,13 +27,13 @@ public class ViewSwitcher {
     }
 
     /**
-     * Replaces {@code container}'s content with the view registered under {@code viewId}.
+     * Replaces {@code container}'s content with the view registered for {@code mode}.
      *
      * @throws IOException if the view's FXML cannot be loaded
-     * @throws IllegalArgumentException if no view is registered under {@code viewId}
+     * @throws IllegalArgumentException if no view is registered for {@code mode}
      */
-    public void switchTo(Pane container, String viewId) throws IOException {
-        Parent view = viewLoader.loadParent(viewRegistry.resourceFor(viewId));
+    public void switchTo(Pane container, Mode mode) throws IOException {
+        Parent view = viewLoader.loadParent(viewRegistry.resourceFor(mode));
         container.getChildren().setAll(view);
     }
 }
