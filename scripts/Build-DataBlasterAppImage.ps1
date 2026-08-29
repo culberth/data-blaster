@@ -93,9 +93,17 @@ try {
         '--description', 'Mode-based data tool with an Office-style Ribbon, backed by a Spring Boot context'
         '--main-jar', $mainJar.Name
         '--module-path', $modulePath
-        # java.management/java.naming/java.instrument/java.sql are not pulled in by
-        # javafx.controls/javafx.fxml alone, but the embedded Tomcat servlet container
-        # (spring-boot-starter-web) needs them at startup (e.g. JMX bean registration).
+        # javafx.controls/javafx.fxml are what the UI needs. The five java.* modules after them
+        # were added for the embedded Tomcat servlet container, which this project no longer has.
+        #
+        # They are deliberately still listed. Some are plausibly still required by the Spring
+        # context alone (java.instrument for LoadTimeWeaver support, java.naming and java.sql for
+        # types spring-core references), and java.security.jgss almost certainly is not. But a
+        # module missing from a jpackage image fails with NoClassDefFoundError when the packaged
+        # .exe is launched, not when it is built -- and this script is a manual Windows step that
+        # CI never runs, so a wrong trim would stay invisible until someone ran the shipped app.
+        # Narrowing this list means building both variants and actually launching them; until
+        # someone does that, the cost of keeping them is a slightly larger runtime image.
         '--add-modules', 'javafx.controls,javafx.fxml,java.management,java.naming,java.instrument,java.sql,java.security.jgss'
     )
     if ($Console) { $jpackageArgs += '--win-console' }

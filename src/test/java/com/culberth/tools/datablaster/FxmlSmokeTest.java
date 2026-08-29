@@ -34,7 +34,7 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
  * software-only Glass platform, so this needs no display and CI's Linux runner proves it. The rest
  * of the suite initialises no toolkit at all and should stay that way.
  */
-@SpringBootTest(properties = "spring.main.web-application-type=none")
+@SpringBootTest
 class FxmlSmokeTest {
 
     /** The FXML files that exist today, asserted so a glob matching nothing cannot pass quietly. */

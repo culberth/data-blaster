@@ -24,9 +24,22 @@ import org.springframework.stereotype.Component;
  *
  * <p><strong>Threading.</strong> This state belongs to the JavaFX Application Thread. The
  * mutators enforce that and throw if called from anywhere else; the property accessors are
- * read-only so there is no second, unguarded way in. Code running off the FX thread — notably
- * Tomcat worker threads in {@code com.culberth.tools.datablaster.web} — must read through
- * {@link #snapshot()} and write through {@link #onFxThread(Runnable)}.
+ * read-only so there is no second, unguarded way in. Code running off the FX thread writes through
+ * {@link #onFxThread(Runnable)}.
+ *
+ * <p><strong>There is no off-thread read path, and that is a deliberate absence.</strong> This
+ * class used to publish an immutable {@code Snapshot} record through a {@code volatile} field, kept
+ * current by listeners on every field in it, because the loopback HTTP layer read state from Tomcat
+ * worker threads. That layer is gone, and a record with no reader — maintained on every write, and
+ * tested as though it had one — is scaffolding rather than design.
+ *
+ * <p>When SOAP mode brings a server back, the pattern comes back with it and should be rebuilt
+ * rather than improvised: an immutable record published through a {@code volatile} field, rewritten
+ * on the FX thread by a listener, and deliberately narrower than this class. The narrowness is the
+ * part worth remembering — tail numbers are the most identifying data this tool holds, and a
+ * loopback bind separates hosts rather than users, so a projection built for one handler is what
+ * stops the next one leaking them by accident. {@link Settings#from(AppState)} is the nearest live
+ * example of the shape: read on the FX thread, immutable once it crosses.
  *
  * <p><strong>The same rule covers the collection.</strong> {@link #portTailMappings()} returns an
  * unmodifiable view, not the live list. Handing out the backing list would reopen exactly the hole
@@ -55,7 +68,7 @@ public class AppState {
     private static volatile Thread fxApplicationThread;
 
     /**
-     * The mode the application is in. Persisted, and the one mode-scoped value in {@link Snapshot}.
+     * The mode the application is in. Persisted.
      *
      * <p>The initial values throughout this class are read from {@link Settings#DEFAULTS} rather
      * than repeated as literals. Two copies of "the default playback speed is 1.0" is precisely the
@@ -99,11 +112,7 @@ public class AppState {
     private final IntegerProperty soapPort =
             new SimpleIntegerProperty(Settings.DEFAULTS.soap().port());
 
-    /**
-     * The colour theme. Deliberately absent from {@link Snapshot}: that record is documented as the
-     * fields a caller outside the UI could meaningfully use, and which colours a window is painted
-     * in is not one of them. {@link Settings} therefore reads this directly, on the FX thread.
-     */
+    /** The colour theme. Read by {@link Settings} directly, on the FX thread. */
     private final ObjectProperty<Theme> theme =
             new SimpleObjectProperty<>(Settings.DEFAULTS.theme());
 
@@ -113,23 +122,6 @@ public class AppState {
      * other's nodes.
      */
     private final DoubleProperty contentOpacity = new SimpleDoubleProperty(1.0);
-
-    /**
-     * Snapshot of the fields off-thread callers can act on. Written on the FX thread, read on any
-     * thread; {@code volatile} publishes the whole record safely.
-     */
-    private volatile Snapshot snapshot;
-
-    public AppState() {
-        Runnable resync = this::resnapshot;
-        currentMode.addListener((obs, old, now) -> resync.run());
-        playbackSpeedFactor.addListener((obs, old, now) -> resync.run());
-        logFolder.addListener((obs, old, now) -> resync.run());
-        contentOpacity.addListener((obs, old, now) -> resync.run());
-        // Derived rather than duplicated: a hardcoded initial Snapshot would silently drift from
-        // the property defaults above the moment one of them changed.
-        resnapshot();
-    }
 
     /**
      * Records the calling thread as the JavaFX Application Thread. Called once during UI start-up;
@@ -334,41 +326,13 @@ public class AppState {
     }
 
     /**
-     * An immutable view of the state an off-thread caller can act on. This is the only supported
-     * way for non-FX threads (e.g. HTTP request handlers) to observe app state.
+     * Fails loudly when a mutator is called off the JavaFX Application Thread.
      *
-     * <p>Keep this to fields a caller outside the UI could meaningfully use. Cosmetic, window-scoped
-     * values do not belong in a record the web layer reads — and neither does anything sensitive.
-     * The mappings in particular are kept out deliberately: tail numbers are the most identifying
-     * data this tool holds, and the HTTP API they would become reachable through is loopback-bound
-     * but unauthenticated. Loopback separates hosts, not users. Keeping this record narrow means a
-     * future endpoint cannot leak them by accident; a handler that legitimately needs them can be
-     * given a second, deliberate read path.
-     */
-    public Snapshot snapshot() {
-        return snapshot;
-    }
-
-    private void resnapshot() {
-        File folder = logFolder.get();
-        snapshot = new Snapshot(
-                currentMode.get(),
-                playbackSpeedFactor.get(),
-                folder == null ? null : folder.getAbsolutePath());
-    }
-
-    /** Immutable, thread-safe carrier for {@link AppState#snapshot()}. */
-    public record Snapshot(
-            Mode mode,
-            double playbackSpeedFactor,
-            String logFolderPath) {
-    }
-
-    /**
-     * Fails loudly when a mutator is called off the JavaFX Application Thread. JavaFX properties
-     * perform no thread check of their own, so without this an off-thread write would run the
-     * listener chain — and {@link #resnapshot()}, which reads the properties non-atomically — on
-     * that thread, producing a torn snapshot and an unsynchronized write to UI-owned state.
+     * <p>JavaFX properties perform no thread check of their own, so without this an off-thread
+     * write would run the whole listener chain on that thread — every binding, every control that
+     * observes the value, and the settings writer's change listener — producing unsynchronized
+     * writes to UI-owned state and a settings snapshot read while another thread was still editing
+     * it.
      */
     private static void requireFxThread() {
         Thread fxThread = fxApplicationThread;

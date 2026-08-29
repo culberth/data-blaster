@@ -6,15 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Data Blaster** — `com.culberth.tools:data-blaster`, package `com.culberth.tools.datablaster`. A
 JavaFX + Spring Boot desktop tool: an Office-style ribbon, switchable content views, modal dialogs,
-persisted settings, light/dark theming, and a small loopback-only HTTP companion API.
+persisted settings and light/dark theming. Spring is here for dependency injection and the bean
+lifecycle only — the app serves nothing and binds no port.
 
 Forked from JFXRibbon, a template written to be forked. The rename (PRD R27) is **done**; the
 directory `tool-boilerplate` and the GitHub remote are the last inherited names, and renaming those
 is a manual step outside the build.
 
-**The four modes do not exist yet.** The ribbon's Mode toggles still select four inherited
-placeholder views. Replacing them with Log, Message, SOAP and REST — each with its own persisted
-settings — is the work specified in the PRD and not yet started.
+**The modes are real; their views and their editors are not yet.** `Mode` is a first-class enum,
+`ViewRegistry` is keyed by it, the selected mode persists, and every mode's settings persist under
+their own key namespace. What remains from the PRD: the tabbed Preferences rebuild (General / Log /
+Message / SOAP), the port-to-tail `TableView`, per-tab Reset, and the four mode views including an
+honest REST placeholder. Until the tabs land, Message's type, SOAP's port and Log's mapping table
+persist correctly with nowhere to be edited.
+
+**The loopback HTTP layer has been removed** (PRD Q10, answered no). There is no `web` package, no
+embedded Tomcat, and no `spring-boot-starter-webmvc` dependency. If you find references to
+`StatusController`, `LoopbackHostFilter` or `AppState.Snapshot` anywhere, they are stale.
 
 **`JFXRibbon` is gone; `ribbon` stays.** The app still has a ribbon, so `ribbon.css`, the `-jfx-*`
 CSS tokens, `controller.ribbon`, `fxml/ribbon/`, and every `ribbon-*` style class are correct as they
@@ -22,8 +30,8 @@ are. `ribbon.css` is loaded by name and parsed by name in `ThemeContrastTest`, s
 on `ribbon` breaks theming at runtime rather than at compile time.
 
 - [docs/architecture.md](docs/architecture.md) — how the **current** code works and why. Accurate as
-  of the rename commit. Keep it that way: PRD requirement R21 says architecture.md is updated in the
-  same change as the code it describes, not as a follow-up.
+  of the HTTP-layer removal. Keep it that way: PRD requirement R21 says architecture.md is updated in
+  the same change as the code it describes, not as a follow-up.
 - [docs/PRD.md](docs/PRD.md) — what is being **built next**: the four modes and their settings. v1
   makes the modes configurable and deliberately implements none of their behaviour. That boundary is
   the thing to push back with when scope creeps.
@@ -72,22 +80,26 @@ leak pass locally and fail only on CI.
 
 ```
 bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
-  -> controller (MainController, Preferences/About, View1-4)
+  -> controller (MainController, Preferences/About, the four mode views)
        -> ui (StageRegistry, ViewRegistry, ViewSwitcher, DialogService)
-            -> model (AppState — imports nothing from the app)
-web (StatusController, LoopbackHostFilter) -> model, via Snapshot only
+            -> model (AppState, Mode, Settings — imports nothing from the app)
 ```
 
-`model` never imports from `controller`, `ui`, or `web`. `web` never imports from `controller` or
-`ui`. No controller imports another controller.
+`model` never imports from `controller` or `ui`. No controller imports another controller.
 
 **Key invariants enforced by the code (not just convention) — do not casually "clean up" these:**
 
-- `AppState` is the single channel for shared state (`simFactor`, `logFolder`, `theme`,
-  `currentViewId`, `contentOpacity`). Writes must happen on the FX thread (enforced by a guard that
-  checks a `Thread` captured at startup, *not* `Platform.isFxApplicationThread()` — probing that
-  would initialize the JavaFX toolkit from plain unit tests). Off-thread readers (the web layer) must
-  use `AppState.snapshot()`, an immutable record that is deliberately narrower than `AppState`.
+- `AppState` is the single channel for shared state (`currentMode`, `theme`, `contentOpacity`,
+  `playbackSpeedFactor`, `logFolder`, the port-to-tail mappings, `messageType`, `soapPort`). Writes
+  must happen on the FX thread (enforced by a guard that checks a `Thread` captured at startup, *not*
+  `Platform.isFxApplicationThread()` — probing that would initialize the JavaFX toolkit from plain
+  unit tests). Off-thread writers use `AppState.onFxThread(Runnable)`; there is deliberately **no**
+  off-thread read path since the web layer went, and `AppStateTest` pins that absence.
+- The mapping collection obeys the same rules, and gets none of them for free: `portTailMappings()`
+  hands out an **unmodifiable** view (returning the live `ObservableList` reopens the hole the
+  read-only accessors close), edits replace the whole set rather than mutating it, and the mutators
+  run the thread guard. `SettingsService` subscribes to it with a `ListChangeListener` — a
+  `ChangeListener` on an `ObservableList` never fires here, so edits would persist nowhere.
 - All property accessors return read-only types (`ReadOnlyDoubleProperty`, etc.) — there is
   intentionally no second, unguarded way to mutate state.
 - `AppState` subscriptions from FXML controllers must use `WeakChangeListener` — controllers are
@@ -97,20 +109,16 @@ web (StatusController, LoopbackHostFilter) -> model, via Snapshot only
   stale, detached node tree after a reload.
 - `Launcher` (not `DataBlasterApplication`) is the JAR's main class specifically so `java -jar` doesn't
   trip JavaFX's launcher checks.
-- `DataBlasterApplication.init()` starts Spring/Tomcat before any window exists, and retries with
-  `--spring.main.web-application-type=none` **only** on a port conflict (`PortInUseException` /
-  `BindException`, checked via `NestedExceptionUtils.getMostSpecificCause`); anything else is
-  rethrown. Any log line about the fallback must be emitted *after* the replacement context is up —
-  Spring tears down Logback when a context fails, so anything logged in that window is silently lost.
-- `LoopbackHostFilter` validates the `Host` header on **every** path (not a per-handler check) to
-  block DNS-rebinding attacks against the loopback-bound HTTP API, and returns a bare 404 with no
-  body on failure (a distinctive error/body would fingerprint the app).
+- `DataBlasterApplication.init()` boots Spring and catches nothing. It used to retry without the web
+  layer on a port conflict; with no server there is nothing a retry could fix. The reasoning is kept
+  in architecture.md §3 because SOAP mode will inherit the same problem.
 - Settings persistence (`Settings` / `SettingsStore` / `SettingsService`) restores `AppState` values
   *before* the ribbon controls subscribe to them (inside one `bind()` call, so the order can't be
   gotten wrong), reads tolerantly per-field (a bad value falls back to default and logs; a missing
   file is a silent first run), and writes off the FX thread, coalesced, with a `@PreDestroy` flush.
-  `theme` is deliberately excluded from `AppState.Snapshot` (that record is for the web layer) but is
-  still persisted, read directly off `AppState` on the FX thread.
+  Keys are namespaced by mode (`log.*`, `message.*`, `soap.*`); `theme` and `mode` stay unprefixed.
+  Mappings are stored one key per port (`log.mapping.<port>=<tail>`) so the file format enforces port
+  uniqueness; tail uniqueness is checked in code, and each entry is read tolerantly on its own.
 - Dark theme is implemented as token overrides in `ribbon.css` under `.root.theme-dark`, applied via
   `ThemeService` using an **invalidation** listener (not a `ChangeListener` — a `ChangeListener` here
   previously fired once and then silently stopped) and tracking scene roots weakly. `ThemeContrastTest`
@@ -123,13 +131,14 @@ needed. A group's `initialize()` runs before the shell's (FXMLLoader builds dept
 *subscribe* to `AppState` there but must not *publish*, since the shell hasn't run yet and will
 overwrite it.
 
-**Adding an HTTP endpoint:** handlers run on Tomcat worker threads, never the FX thread. Read via
-`AppState.snapshot()`; write via `AppState.onFxThread(Runnable)`. Never touch a JavaFX node/property
-directly from `web`.
+**Adding a mode setting:** a field on `AppState` (read-only accessor + guarded mutator), a component
+on the matching nested record in `Settings`, a namespaced key with a tolerant read in
+`SettingsStore`, and a restore + subscribe line in `SettingsService.bind()` — restore before
+subscribe, or every launch rewrites the file.
 
 ## Testing
 
-110 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
+181 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
 that need a real scene graph (`FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`,
 `ThemeSwitchingTest`) initialize the JavaFX toolkit — everything else, especially `AppStateTest`, must
 stay toolkit-free so CI's headless runner keeps working. See the test table in

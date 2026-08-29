@@ -5,10 +5,14 @@ A JavaFX desktop tool with an Office-style ribbon, backed by a Spring Boot conte
 Data Blaster runs in one of four modes — **Log**, **Message**, **SOAP**, **REST** — selected from the
 ribbon, each with its own persisted configuration.
 
-> **Status: the shell works; the modes do not yet exist.** What runs today is the inherited JFXRibbon
-> shell — ribbon, view switching, persisted settings, light/dark theming, a loopback HTTP endpoint —
-> with four placeholder views behind the mode toggles. Replacing those with real modes is specified
-> in [docs/PRD.md](docs/PRD.md) and is the work in progress.
+> **Status: the modes are real; they do not do anything yet.** Selecting a mode switches the view and
+> the choice survives a restart, and every mode's settings persist under their own namespace in the
+> settings file. What is still missing is the interface to most of them — Preferences is one flat
+> pane, so Message's type, SOAP's port and Log's port-to-tail table persist correctly with nowhere to
+> be edited — and the four content views are still abstract placeholders.
+>
+> No mode has any behaviour: nothing reads a log, sends a message or serves SOAP. That boundary is
+> deliberate and is specified in [docs/PRD.md](docs/PRD.md), which is the work in progress.
 
 ## Build and run
 
@@ -24,7 +28,7 @@ mvn spring-boot:run
 mvn test
 ```
 
-The test suite is headless — 110 tests, no display required — so it runs unchanged on a build agent.
+The test suite is headless — 181 tests, no display required — so it runs unchanged on a build agent.
 To run one class or one method:
 
 ```bash

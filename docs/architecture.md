@@ -6,18 +6,20 @@ here exist to prevent specific defects that a peer review found in earlier versi
 | | |
 |---|---|
 | **Describes** | `rename-to-data-blaster`, after the mode model and mode-scoped settings landed |
-| **Size** | ~2,880 lines of main Java, ~2,700 of test, 10 FXML files, one stylesheet |
-| **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (servlet), Maven |
+| **Size** | ~2,720 lines of main Java, ~2,630 of test, 10 FXML files, one stylesheet |
+| **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (no web layer), Maven |
 | **Origin** | Forked from JFXRibbon, which was written as a template. See [PRD.md](PRD.md) |
 
 ---
 
 ## 1. What this is
 
-A desktop application shell: an Office-style ribbon, a switchable content area, two modal dialogs,
-and a small loopback-only HTTP layer. It runs on the JavaFX Application Thread with a Spring
-`ApplicationContext` behind it, so UI components are Spring beans and can be given dependencies by
-constructor injection.
+A desktop application shell: an Office-style ribbon, a switchable content area and two modal
+dialogs. It runs on the JavaFX Application Thread with a Spring `ApplicationContext` behind it, so
+UI components are Spring beans and can be given dependencies by constructor injection.
+
+The template also carried a small loopback-only HTTP layer. It has been removed — see §8 for what
+that bought and what is worth carrying forward when SOAP mode brings a server of its own.
 
 **The modes are real; their views and their editors are not yet.** `Mode` is a first-class enum,
 `ViewRegistry` is keyed by it, the selected mode persists, and each mode has its own block of
@@ -47,24 +49,23 @@ below: where duplication is tolerated, and where it is not.
       |         ui   StageRegistry · ViewRegistry · ViewSwitcher · DialogService
       |              |
       v              v
-        model        AppState  (imports nothing from the application)
-                     ^
-                     |
-  web          StatusController · LoopbackHostFilter   (reads via Snapshot only)
+        model        AppState · Mode · Settings  (imports nothing from the application)
 ```
 
-**The rule: dependencies point inward, toward `model`.** `model` imports nothing from
-`controller`, `ui`, or `web`. `web` imports nothing from `controller` or `ui`. No controller
-imports another controller.
+**The rule: dependencies point inward, toward `model`.** `model` imports nothing from `controller`
+or `ui`. No controller imports another controller.
+
+There used to be a fourth package, `web`, sitting alongside `controller` and reading `model` through
+a narrow projection. It is gone (§8); the rule it demonstrated — that a package outside the UI
+depends on `model` and on nothing else — is the one to reinstate if SOAP mode adds a server.
 
 | Package | Holds | Depends on |
 |---|---|---|
 | `com.culberth.tools.datablaster` | Entry points, Spring config, FXML loading | `ui`, `controller` |
-| `.model` | `AppState` and its off-thread projection; `Mode`, `MessageType`, `Theme`, `PortTailMapping`; the settings record, store and service | nothing in the app |
+| `.model` | `AppState`; `Mode`, `MessageType`, `Theme`, `PortTailMapping`; the settings record, store and service | nothing in the app |
 | `.ui` | Window ownership, view registry, view swapping, dialogs | `model` |
 | `.controller` | The shell and the content views | `ui`, `model` |
 | `.controller.ribbon` | One controller per ribbon group | `ui`, `model` |
-| `.web` | The companion HTTP layer | `model` (via `Snapshot` only) |
 
 ---
 
@@ -72,26 +73,34 @@ imports another controller.
 
 1. `Launcher.main` — a separate entry point that does **not** extend `Application`, so the Spring
    Boot fat jar can be run with `java -jar` without tripping JavaFX's launcher checks.
-2. `DataBlasterApplication.init()` boots Spring, including embedded Tomcat.
+2. `DataBlasterApplication.init()` boots Spring.
 3. `DataBlasterApplication.start(Stage)` records the FX thread, registers the primary stage, loads
    `main.fxml`, and shows the window.
-4. `stop()` closes the Spring context. The JVM then exits because Tomcat's non-daemon thread ends.
+4. `stop()` closes the Spring context, which runs the `@PreDestroy` settings flush.
 
-### The HTTP layer must not be able to prevent launch
+### `init()` no longer catches anything
 
-Tomcat starts in `init()`, before any window exists. If the port is taken, a naive implementation
-aborts the launch and writes its only diagnostic to a console that the windowed `jpackage` build
-does not have — the app simply never opens, with no explanation.
+This used to be the most intricate path in the project. Tomcat started in `init()` before any window
+existed, so a taken port aborted the launch and wrote its only diagnostic to a console the windowed
+`jpackage` build does not have — the app simply never opened, with no explanation. `init()`
+therefore caught the failure, checked whether its most specific cause was a `PortInUseException` or
+`BindException`, retried without the web layer, and put `(HTTP layer disabled)` in the window title
+so the degraded state was visible where the user actually is. The retry deliberately narrowed to
+port conflicts, and the warning was deliberately logged *after* the replacement context came up,
+because Spring tears down Logback when a context fails and anything logged in that window is
+silently discarded.
 
-So `init()` catches a startup failure, checks whether its most specific cause is a
-`PortInUseException` or `BindException`, and if so retries with
-`--spring.main.web-application-type=none`. The UI starts without the HTTP layer, and the window
-title becomes `Data Blaster (HTTP layer disabled)` so the degraded state is visible where the user
-actually is.
+**All of it is gone**, because there is no server, no port, and therefore nothing a retry could fix.
+`init()` is now three lines with no branching. A failure there is a real bug and propagates.
 
-**Anything that is not a port conflict is rethrown.** A broad catch here would mislabel every
-startup failure as a web-server problem and boot the whole context a second time before failing
-anyway.
+It is recorded here rather than deleted outright because the reasoning outlived the code: if SOAP
+mode starts a server during launch, it inherits exactly this problem, and the shape of the answer —
+narrow the retry to the specific cause, surface the degraded state in the UI, and log *after* the
+context is back up — is the part that took the effort to get right.
+
+**The one piece still live** is the `catch` in `start(Stage)`. JavaFX only calls `stop()` when
+`start()` completed, so a failure there would leave the booted Spring context open with no window
+and no shutdown hooks — including the settings flush.
 
 ---
 
@@ -99,8 +108,8 @@ anyway.
 
 `AppState` is a singleton holding `currentMode`, `theme` and `contentOpacity`, Log mode's
 `playbackSpeedFactor`, `logFolder` and port-to-tail mappings, Message mode's `messageType` and
-SOAP's `soapPort`. It is the only channel through which the ribbon groups, the shell and the web
-layer communicate.
+SOAP's `soapPort`. It is the only channel through which the ribbon groups, the shell and the
+Preferences dialog communicate.
 
 Everything but the mappings is a JavaFX property. The mappings are an `ObservableList` — which is
 what makes them the interesting case below, because none of the rules this class enforces were
@@ -116,18 +125,32 @@ file sees — is in `Settings` and in the key namespaces.
 
 **Writes happen on the FX thread.** Every mutator calls a guard that throws `IllegalStateException`
 naming the escape hatch. JavaFX properties perform no thread check of their own, so an off-thread
-write would run the whole listener chain — including the snapshot rebuild, which reads several
-properties non-atomically — on that thread.
+write would run the whole listener chain on that thread — every binding, every control observing the
+value, and the settings writer's change listener.
 
 **There is no second way in.** The property accessors return `ReadOnlyDoubleProperty` and friends.
 Returning the mutable `Property` would leave `appState.currentModeProperty().set(...)` as an
 unguarded door beside the guarded one. No call site needed changing: every reader binds, formats or
 observes.
 
-**Off-thread readers use `snapshot()`.** It returns an immutable record published through a
-`volatile` field. `Snapshot` is deliberately narrower than `AppState` — it carries only what a
-caller outside the UI could act on, so cosmetic window-scoped values do not end up in a record the
-web layer parses.
+**Off-thread writers use `onFxThread(Runnable)`.** It is the escape hatch the guard's own error
+message names, which is why it survives even though nothing currently calls it.
+
+**There is no off-thread read path, and that absence is deliberate.** This class used to publish an
+immutable `Snapshot` record through a `volatile` field, rebuilt by listeners on every field it
+carried, because the HTTP layer read state from Tomcat worker threads. That layer is gone (§8), so
+the record went with it rather than being maintained on every write for a reader that no longer
+exists.
+
+When SOAP mode brings a server back, rebuild the pattern rather than improvising: an immutable
+record, published through a `volatile` field, rewritten on the FX thread by a listener, and
+deliberately **narrower** than this class. The narrowness is the part worth remembering — tail
+numbers are the most identifying data this tool holds, and a loopback bind separates hosts rather
+than users, so a projection built for one handler is what stops the next one leaking them by
+accident. `AppStateTest` pins the absence, because the reflex answer to "the server needs this
+state" is to hand it the live object, which is what the projection existed to prevent.
+`Settings.from` is the nearest live example of the shape: read on the FX thread, immutable once it
+crosses.
 
 ### The collection obeys the same rules, and does not get them for free
 
@@ -145,12 +168,10 @@ complete set every time, and a rejected edit therefore cannot leave the observab
 half-updated for whoever is watching it. It also means one change event per edit rather than a
 remove followed by an add.
 
-**The mappings are deliberately not in `Snapshot`.** Tail numbers are the most identifying data
-this tool holds, and `Snapshot` is the boundary to an HTTP API that is loopback-bound but
-unauthenticated — and loopback separates hosts, not users. Keeping the record narrow means a future
-endpoint cannot leak them by reading the record every handler already has. A handler that
-legitimately needs them can be given a second, deliberate read path. `mode` is the only field the
-modes added to it.
+**Nothing outside the UI can read the mappings at all.** That was a design constraint on `Snapshot`
+while it existed — tail numbers stayed out of it deliberately — and with the projection gone it is
+now simply true of the whole class. It is the rule to carry forward, not a fact to rediscover: when
+a server returns, the mappings do not go into its projection by default.
 
 ### The FX thread is recorded, not probed
 
@@ -226,7 +247,7 @@ with the string it was guarding.
 
 `ViewSwitcher` only replaces the container's children on success, and the shell restores
 `currentMode` to the mode actually on screen if a load fails. Otherwise the ribbon highlights a
-mode whose view never rendered and `snapshot()` reports it to the web layer.
+mode whose view never rendered, and every reader of `currentMode` believes it.
 
 ---
 
@@ -243,34 +264,40 @@ and must not replace the real failure with its own.
 
 ---
 
-## 8. The HTTP layer
+## 8. The HTTP layer, and why there isn't one
 
-An embedded Tomcat bound to `127.0.0.1:8080`, serving one endpoint:
+**Removed.** The application no longer serves anything, no longer binds a port, and no longer
+depends on `spring-boot-starter-webmvc` — Spring is here for dependency injection and the bean
+lifecycle only.
 
-```
-GET http://localhost:8080/api/status  ->  {"app":"Data Blaster","state":"running"}
-```
+It existed in the template to demonstrate a Spring Boot context living behind a JavaFX app: an
+embedded Tomcat on `127.0.0.1:8080` serving one `/api/status` endpoint, guarded by a
+`LoopbackHostFilter` that validated the `Host` header on every path. It was well-reasoned for what
+it was, and none of it was load-bearing for this application.
 
-**`LoopbackHostFilter` validates the `Host` header on every path**, returning a bare, bodiless 404
-otherwise. Three decisions are load-bearing:
+**What removing it cost, in the sense of what it took away:** an endpoint nothing consumed, a
+DNS-rebinding filter guarding an endpoint nothing consumed, and the projection in §4 that existed to
+feed them.
 
-- **A filter, not a handler check.** The loopback bind does not stop DNS rebinding: a page on an
-  attacker's domain resolving to 127.0.0.1 reaches this server same-origin. A per-handler check
-  leaves `/`, unmapped paths falling through to the error controller, and every future endpoint
-  answering rebound requests.
-- **No response body.** A distinctive error message fingerprints the application just as reliably
-  as leaking state does.
-- **Not Actuator's vocabulary.** `{"status":"UP"}` would collide with Actuator's own health
-  endpoint if it is ever added, leaving two endpoints that can disagree.
+**What it bought:**
 
-### Adding an endpoint
+- No second bound port to maintain alongside the one SOAP mode will bind. This was the argument that
+  settled it: keeping both would mean two servers, two port-conflict stories, and a security control
+  on the one nobody asked for.
+- No port-conflict fallback in `init()` (§3), which was the most intricate start-up path in the
+  project and existed solely because a taken port must not stop a desktop app from opening.
+- No `spring.main.web-application-type=none` on five test classes, which carried it because a plain
+  context load would otherwise fail on any machine already running the app.
+- No unauthenticated attack surface at all. Loopback is a *host* boundary, not a user boundary — it
+  does not separate local accounts on a shared machine — and the settings this app now holds include
+  tail numbers and a log-folder path containing the OS username.
 
-Handlers run on Tomcat worker threads, never the FX thread. Read via `AppState.snapshot()`; write
-via `AppState.onFxThread(Runnable)`. Never touch a JavaFX node or property directly.
-
-**Note the trade-off before exposing more:** `Snapshot` carries the absolute log-folder path, which
-contains the OS username. Loopback is a *host* boundary, not a user boundary — it does not separate
-local accounts on a shared or multi-session machine. Nothing under `/api` is authenticated.
+**When SOAP mode brings a server back,** it starts from the mode's configured port rather than from
+this one, and the two things worth carrying forward are the filter's reasoning (a loopback bind does
+not stop DNS rebinding, so validate `Host` in a filter rather than per-handler, and fail with a bare
+bodiless 404 so the error does not fingerprint the app) and §4's note on rebuilding the off-thread
+read path. Neither survives as code, deliberately: a security control kept alive for a server that
+does not exist yet is a control nobody is testing against a threat nobody currently has.
 
 ---
 
@@ -302,14 +329,17 @@ a widening list of unrelated scalars whose only clue to what belongs where is a 
 rather than trusting callers. `Settings` is handed to a background writer thread on the strength of
 being immutable, and a record wrapping a mutable `List` is not immutable however its accessors read.
 
-**`theme` is deliberately absent from `AppState.Snapshot`,** and so are the message type, the SOAP
-port and the mappings. That record is documented as the fields a caller outside the UI could
-meaningfully use. So `Settings.from` takes the `AppState` and reads it on the FX thread — where its
-only caller, a change listener, already runs — rather than widening a record whose contract says
-otherwise.
+**`Settings.from` reads `AppState` directly, on the FX thread** — where its only caller, a change
+listener, already runs. It took an `AppState.Snapshot` once and was changed away from it because the
+theme was deliberately not in that record; now that the record is gone entirely (§4), reading the
+properties directly is the only path, and the immutable `Settings` it produces is what crosses to
+the writer thread.
 
-**`8081` is the SOAP default because the embedded HTTP layer binds `8080`.** Defaulting the two to
-the same port would make the out-of-box state a port conflict.
+**`8081` is the SOAP default** because the removed HTTP layer bound `8080` and defaulting the two to
+the same port would have made the out-of-box state a port conflict. The conflict it avoided no
+longer exists, but the default stands: it is a stored value in files that already exist, and
+changing it now would move a configured port under someone for no benefit. `8080` also remains the
+likeliest port for whatever else is running on a developer's machine.
 
 Three pieces, split so the fragile part is testable on its own:
 
@@ -341,8 +371,9 @@ rest; every subscription `bind()` makes is one the shutdown has to undo.
 **Read tolerantly, per value, and — for the mappings — per entry.** A missing file is a first run
 and is silent. Anything else falls back to defaults and is logged, and each value falls back on its
 own: a mistyped number does not discard a good folder path, and one malformed mapping does not
-discard the other nineteen. `read()` does not throw — the argument that the HTTP layer must not be
-able to prevent launch applies just as much to a settings file someone has hand-edited.
+discard the other nineteen. `read()` does not throw — the argument that once applied to the HTTP
+layer (a companion part must not be able to prevent launch) applies just as much to a settings file
+someone has hand-edited, and now that the HTTP layer is gone this is the only place it still binds.
 
 **Write off the FX thread, coalesced.** A control that fires on every step of a drag would otherwise
 mean a file per step, so the writer holds only the latest value and a burst collapses into as few
@@ -511,16 +542,14 @@ back as its default while the log folder on the next line restored perfectly.
 
 ## 9. Testing
 
-209 tests, no display required. Run on Linux and Windows for every push — see §10.
+181 tests, no display required. Run on Linux and Windows for every push — see §10.
 
 | Suite | Covers | Toolkit |
 |---|---|---|
-| `AppStateTest` | Snapshot derivation and freshness, the off-thread rejection contract, and — by reflection — that the accessors stay read-only. Plus the collection's own versions of all three: the mapping mutators are guarded, the handed-out list is unmodifiable, an edit is one change event, and the mappings are absent from `Snapshot` | no |
+| `AppStateTest` | The documented defaults, the off-thread rejection contract, and — by reflection — that the accessors stay read-only and that no off-thread read projection has crept back. Plus the collection's own versions of those rules: the mapping mutators are guarded, the handed-out list is unmodifiable, and an edit is one change event | no |
 | `PortTailMappingTest` | The tail format, the port range, and uniqueness in both directions — including that two tails differing only in case collide rather than both being accepted | no |
 | `StoredEnumParsingTest` | The tolerant-parse contract `Theme`, `Mode` and `MessageType` share: every constant round-trips, unknown values fall back rather than throwing, and the stored form is not the shown form | no |
-| `LoopbackHostFilterTest` | 24 host vectors, including the suffix attacks (`localhost.evil.example`) that a refactor to `startsWith` would silently open | no |
 | `ViewRegistryTest` | That every `Mode` resolves to a view, that no two share one, and the miss message | no |
-| `StatusControllerTest` | Payload shape, and that it avoids Actuator's vocabulary | no |
 | `SpringContextTest` | That the context starts, that every controller under `controller` is prototype-scoped, and that the shared services are not | no |
 | `ModeGroupViewIdTest` | That every `userData` in the ribbon names a real `Mode`, that every `Mode` has a toggle, that each resolves through `ViewRegistry`, and that the toggle marked selected is the default mode — read from the FXML as XML | no |
 | `FxmlSmokeTest` | That all ten FXML files load through the real Spring-backed controller factory | **yes** |
@@ -581,10 +610,12 @@ commitment than this project has made.
 The console variant exists for diagnosis: the windowed launcher has no stderr, so a startup failure
 there is invisible without it.
 
-`--add-modules` is a hand-maintained list, five of whose entries exist solely for embedded Tomcat
-and were found empirically. A dependency change that reaches a new JDK module fails at native
-launch; recovery is to run the console variant and read the stack trace. Packaging is Windows-only.
-Both are accepted limits for a single-platform example.
+`--add-modules` is a hand-maintained list found empirically. Five of its entries were added for the
+embedded Tomcat that no longer exists and are deliberately still there: a module missing from the
+image fails at native launch rather than at build time, and this script is a manual Windows step CI
+never runs, so a wrong trim would stay invisible until someone ran the shipped app. Narrowing it
+means building both variants and launching them. Recovery from any such failure is to run the
+console variant and read the stack trace. Packaging is Windows-only; both are accepted limits.
 
 ---
 
@@ -596,7 +627,7 @@ rather than 4.0, which reaches end of life on 31 December 2026. 4.1 is maintaine
 **31 July 2027**.
 
 That date is the constraint, not a footnote. The app-image has no update mechanism, so a fork
-still on 4.1 after July 2027 has no patch path for a vulnerability in the embedded Tomcat. **A fork
+still on 4.1 after July 2027 has no patch path for a vulnerability in Spring itself. **A fork
 intended to ship must plan to move again**, and the reason this is stated rather than left implicit
 is that the previous silence about 3.5 read as an oversight.
 

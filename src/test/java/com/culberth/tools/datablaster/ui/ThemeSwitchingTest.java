@@ -26,7 +26,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * what the user sees <em>in every window that is already open</em> — not just the next one created.
  * That is the assertion below, and it is the one that would have failed the first time.
  */
-@SpringBootTest(properties = "spring.main.web-application-type=none")
+@SpringBootTest
 class ThemeSwitchingTest {
 
     @Autowired

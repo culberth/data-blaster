@@ -48,49 +48,46 @@ class AppStateTest {
         AppState.forgetFxApplicationThread();
     }
 
-    // --- the snapshot -------------------------------------------------------------------------
+    // --- the defaults ---------------------------------------------------------------------------
 
+    /**
+     * The defaults come from {@link Settings#DEFAULTS} rather than being repeated as literals in
+     * this class, so this is the check that the two have not been wired to different values.
+     */
     @Test
-    void initialSnapshotIsDerivedFromThePropertyDefaults() {
-        AppState.Snapshot snapshot = appState.snapshot();
-        assertNotNull(snapshot);
-        assertSame(Mode.LOG, snapshot.mode());
-        assertEquals(1.0, snapshot.playbackSpeedFactor());
-        assertNull(snapshot.logFolderPath());
-    }
-
-    @Test
-    void snapshotReflectsAWriteRatherThanBeingStale() {
-        // Not snapshot()==snapshot(): that would pass even if snapshot() returned null.
-        appState.setCurrentMode(Mode.SOAP);
-        appState.setPlaybackSpeedFactor(2.5);
-        AppState.Snapshot snapshot = appState.snapshot();
-        assertSame(Mode.SOAP, snapshot.mode());
-        assertEquals(2.5, snapshot.playbackSpeedFactor());
-    }
-
-    @Test
-    void snapshotOmitsCosmeticState() {
-        // Snapshot is the web layer's contract; window-scoped display values do not belong in it.
-        assertEquals(3, AppState.Snapshot.class.getRecordComponents().length);
+    @DisplayName("a fresh AppState starts at the documented defaults")
+    void aFreshAppStateStartsAtTheDocumentedDefaults() {
+        assertSame(Mode.LOG, appState.getCurrentMode());
+        assertSame(Theme.LIGHT, appState.getTheme());
+        assertEquals(1.0, appState.getPlaybackSpeedFactor());
+        assertNull(appState.getLogFolder());
+        assertTrue(appState.portTailMappings().isEmpty());
+        assertSame(MessageType.MESSAGE_1, appState.getMessageType());
+        assertEquals(8081, appState.getSoapPort());
     }
 
     /**
-     * Tail numbers are the most identifying data this tool holds, and {@code Snapshot} is the
-     * boundary to a loopback-bound but unauthenticated HTTP API. Loopback separates hosts, not
-     * users, so a future endpoint must not be able to reach them by reading the record every
-     * handler already has.
+     * There is deliberately no off-thread read path any more.
+     *
+     * <p>This class used to publish an immutable {@code Snapshot} record for the loopback HTTP
+     * layer, kept current by listeners on every field in it. That layer is gone, so the record went
+     * with it rather than being maintained on every write for a reader that no longer exists.
+     *
+     * <p>Pinned as a test because the deletion is easy to undo by reflex — the obvious way to give
+     * a future server access to this state is to hand it the live object, which is exactly what the
+     * projection existed to prevent. When SOAP mode brings a server back, the pattern should come
+     * back with it: an immutable record, published through a {@code volatile} field, deliberately
+     * narrower than this class.
      */
     @Test
-    @DisplayName("the mapping table is not reachable through the snapshot")
-    void theMappingTableIsNotReachableThroughTheSnapshot() {
-        appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
-
-        for (var component : AppState.Snapshot.class.getRecordComponents()) {
-            assertFalse(component.getName().toLowerCase().contains("mapping")
-                            || component.getName().toLowerCase().contains("tail"),
-                    "Snapshot must not carry the mapping table, but has " + component.getName());
-        }
+    @DisplayName("there is no off-thread read path to reintroduce by accident")
+    void thereIsNoOffThreadReadPath() {
+        assertEquals(0,
+                java.util.Arrays.stream(AppState.class.getDeclaredClasses())
+                        .filter(c -> c.getSimpleName().equals("Snapshot"))
+                        .count(),
+                "Snapshot was removed with the web layer; reinstating it needs a reader and a "
+                        + "deliberate decision about what it may carry, not a quiet re-add");
     }
 
     // --- the thread guard ---------------------------------------------------------------------

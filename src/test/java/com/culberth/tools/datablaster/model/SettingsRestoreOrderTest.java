@@ -48,7 +48,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * way would fail for a reason that has nothing to do with settings. That the shell includes these
  * groups correctly is {@code FxmlSmokeTest}'s job.
  */
-@SpringBootTest(properties = "spring.main.web-application-type=none")
+@SpringBootTest
 class SettingsRestoreOrderTest {
 
     private static final String PREFERENCES = "/fxml/preferences.fxml";

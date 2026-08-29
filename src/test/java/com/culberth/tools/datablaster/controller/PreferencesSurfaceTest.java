@@ -41,7 +41,7 @@ import org.springframework.context.ApplicationContext;
  * the ribbon along with the Appearance group's slider. The dialog is still checked against the
  * shared state directly, which is the property that mattered.
  */
-@SpringBootTest(properties = "spring.main.web-application-type=none")
+@SpringBootTest
 class PreferencesSurfaceTest {
 
     private static final String PREFERENCES = "/fxml/preferences.fxml";

@@ -43,7 +43,7 @@ keeping, but it is not a requirement here and should not be allowed to expand sc
 | S2 | Every mode's settings can be viewed and changed from Preferences, including while running in a different mode | `PreferencesSurfaceTest`, extended per tab | v1 |
 | S3 | All settings survive a restart, and a hand-broken settings file degrades per value rather than wholesale | `SettingsStoreTest` against hand-written files: missing, corrupt, out-of-range, duplicate, BOM-prefixed | v1 |
 | S4 | A port-to-tail mapping cannot be saved that violates the format or uniqueness rules | `PortTailMappingTest` — toolkit-free, at the model layer | v1 |
-| S5 | The suite still runs headless and the app still launches when the HTTP port is taken | Existing CI on Linux and Windows; no new test needs a display | v1 |
+| S5 | The suite still runs headless | Existing CI on Linux and Windows; no new test needs a display. The other half of this criterion — that the app still launches when the HTTP port is taken — retired with the HTTP layer (Q10): there is no port to take | v1 |
 
 S3 and S4 are separate on purpose. S4 is about what the UI will accept; S3 is about what the reader
 will tolerate from a file someone edited by hand. The store must not assume the UI wrote the file —
@@ -95,8 +95,12 @@ unknown key and the new default applies. The same reasoning is why the range is 
 rather than clamped: clamping `0.0` up to `0.1` would start playback crawling instead of saying why.
 
 `8081` is the SOAP default specifically because the embedded HTTP layer binds `8080`; defaulting the
-two to the same port would make the out-of-box state a conflict. Confirmed — see Q3, and Q10 on
-whether that `8080` layer should still exist at all.
+two to the same port would make the out-of-box state a conflict. Confirmed — see Q3.
+
+**Q10 has since removed that `8080` layer**, so the conflict this default avoided no longer exists.
+The default stands anyway: it is already a stored value in existing files, `8080` remains the
+likeliest port for whatever else a developer is running, and moving a configured port for a reason
+that no longer applies is churn.
 
 ### 4.3 Preferences becomes tabbed
 
@@ -164,7 +168,7 @@ nothing to push back against.
 | **Implementing any mode's behaviour** — no log reading or replay, no message sending, no SOAP endpoint, no REST anything | v1 is the configuration surface. A mode that can be configured and does nothing is a complete, testable increment; a half-implemented Log mode is not |
 | **REST mode settings** | Explicitly deferred by the requester. The toggle ships (§6, R14) but has no settings and no Preferences tab |
 | **A contextual ribbon** that swaps groups with the selected mode | Desirable, and the architecture supports it, but it is a mechanism built before knowing which controls deserve quick access. Carried as R16 at *Should*, not *Must* |
-| **Exposing mode settings over HTTP** | The API is loopback-bound but unauthenticated, and loopback is a host boundary rather than a user boundary. Tail numbers are the most identifying data this tool will hold. See D6 |
+| **Exposing mode settings over HTTP** | Moot since Q10: there is no HTTP layer to expose them through. It was a non-goal on its own merits first — the API was loopback-bound but unauthenticated, and loopback is a host boundary rather than a user boundary. Tail numbers are the most identifying data this tool will hold. See D6 |
 | **Migrating existing settings files** | `2.0.0-SNAPSHOT` is unreleased and single-user. Old keys simply go missing and fall back silently, which the per-key tolerant read already does correctly. See D5 |
 | **Multi-profile / named configuration sets** | One configuration per mode. If several sets are ever wanted, that is a second dimension on the file format and deserves its own decision |
 | **Validating that a configured port is actually free** | Bind-time concern, and the mode behaviour that would bind it is out of scope |
@@ -206,7 +210,7 @@ nothing to push back against.
 | R16 | The ribbon shows a group whose controls follow the selected mode | — | Should |
 | R17 | The mapping editor is a `TableView` with Port and Tail No. columns and Add/Remove, rejecting invalid or duplicate entries at entry with the reason shown, not on close | S4 | Must |
 | R18 | Edits still apply immediately and the button still says Close. Reset to defaults is **per tab**, and the Log tab's reset clears the mapping table — which is destructive enough to confirm first | S2 | Must |
-| R19 | Preferences flags a mapping port that collides with the SOAP port or with the HTTP layer's 8080, without blocking it | — | Should |
+| R19 | Preferences flags a mapping port that collides with the SOAP port, without blocking it. The second half of this — flagging a collision with the HTTP layer's 8080 — is dropped: Q10 removed that layer, so there is no longer anything bound at 8080 to collide with | — | Should |
 | R20 | Every new control keeps the inherited accessibility pattern: a caption `Label` with `labelFor` set in `initialize()`, mnemonics, and `accessibleText` on unlabelled controls — but never `accessibleText` on a read-out `Label`, which would hide the value it exists to announce | S2 | Should |
 
 ### Fork hygiene
@@ -286,28 +290,34 @@ character class that accepts `------` is not a validator.
 ### `AppState` shape after this change
 
 ```
-currentMode      ObjectProperty<Mode>        persisted   in Snapshot
-theme            ObjectProperty<Theme>       persisted   NOT in Snapshot (cosmetic)
-contentOpacity   DoubleProperty              not persisted, not in Snapshot
+currentMode       ObjectProperty<Mode>         persisted
+theme             ObjectProperty<Theme>        persisted
+contentOpacity    DoubleProperty               not persisted
 
-log.playbackSpeed DoubleProperty             persisted   in Snapshot
-log.logFolder    ObjectProperty<File>        persisted   in Snapshot
-log.mappings     ObservableMap/List          persisted   NOT in Snapshot  (see D6)
+playbackSpeed     DoubleProperty               persisted   (Log)
+logFolder         ObjectProperty<File>         persisted   (Log)
+portTailMappings  ObservableList               persisted   (Log)
 
-message.type     ObjectProperty<MessageType> persisted   NOT in Snapshot
-soap.port        IntegerProperty             persisted   NOT in Snapshot
+messageType       ObjectProperty<MessageType>  persisted   (Message)
+soapPort          IntegerProperty              persisted   (SOAP)
 ```
 
-`Snapshot` gains `mode` and nothing else. Whether `AppState` grows flat fields or nested per-mode
-holders is an implementation choice, not a product one — but the read-only accessor contract and the
-FX-thread guard apply either way.
+The `Snapshot` column this table originally carried is gone with the record itself — see Q10. Every
+value above is now reachable only from the FX thread, which is what D6 was protecting a subset of.
+
+Whether `AppState` grows flat fields or nested per-mode holders is an implementation choice, not a
+product one — but the read-only accessor contract and the FX-thread guard apply either way, and for
+the mapping collection that means an unmodifiable view rather than merely a read-only property type.
 
 ### HTTP layer
 
-`GET /api/status` → `{"app":"Data Blaster","state":"running"}`, behind `LoopbackHostFilter`. The
-`app` value follows the rename; `StatusControllerTest` asserts the payload shape and needs updating
-with it. No new endpoint, no new field, and the deliberate avoidance of Actuator's `{"status":"UP"}`
-vocabulary still holds.
+**None.** Q10 removed it: no `web/` package, no embedded Tomcat, no bound port, and no
+`spring-boot-starter-webmvc` dependency. Spring remains for dependency injection and the bean
+lifecycle.
+
+The `/api/status` endpoint, its `LoopbackHostFilter`, and the rename of the payload's `app` field
+that §4.4 specified are all void. When SOAP mode brings a server, it starts from that mode's
+configured port and inherits none of this by default.
 
 ## 8. Constraints
 
@@ -335,20 +345,20 @@ violate:
 | R-7 | **A transposed character still passes.** `[A-Z0-9]{6}` is as tight as a format rule can get here — `N13245` is as well-formed as `N12345` — so a typo produces a mapping that silently belongs to no aircraft | Medium | Data attributed to the wrong tail, or to none | Not mitigable by validation. The only real defence is checking against a known fleet roster, which v1 has no source for; noted rather than solved |
 | R-3 | **Mode settings drift from mode behaviour.** v1 defines what is configurable with nothing consuming it, so nothing proves the settings are the right ones | Medium | Rework when Log mode is built | Accepted. The alternative is designing the config against imagined behaviour, which is not obviously better |
 | R-4 | **`architecture.md` goes stale.** It is unusually accurate and its value is entirely in that | Medium | The one document worth reading stops being trustworthy | R21 — same change, not a follow-up |
-| R-5 | **Tail numbers are PII-adjacent** and land in a plaintext file next to a log path containing the OS username, in an app with an unauthenticated loopback API | Low now, higher if the API grows | Disclosure to anything that can reach loopback | D6 — mappings stay out of `Snapshot`, so a future endpoint cannot expose them by accident |
+| R-5 | **Tail numbers are PII-adjacent** and land in a plaintext file next to a log path containing the OS username | Reduced by Q10: the unauthenticated loopback API that was the exposure route is gone, leaving only file-system access, which is the same boundary the rest of the user's profile sits behind | Disclosure to anything that can read the settings file | Was D6. Now structural — nothing outside the FX thread can read this state at all. The rule to carry forward is that mappings do not go into a server's projection by default when SOAP mode adds one |
 | R-6 | **The rename is a find-and-replace waiting to go wrong.** `ribbon` is both half the old product name and the correct word for a UI component this app still has, and the package form is lowercase `jfxribbon` while the display form is not | Medium | A broken stylesheet reference or a mangled style class, found at runtime rather than at compile time — `ribbon.css` is loaded by name and `ThemeContrastTest` parses it by name | R28 names exactly what must not move; R27 keeps the rename in its own commit so the diff is reviewable |
 
 ## 10. Acceptance
 
-- [ ] **A1** — `mvn verify` passes on Linux and Windows, no display required
-- [ ] **A2** — The four toggles read Log, Message, SOAP, REST; selecting one switches the view; the choice survives a restart
+- [ ] **A1** — `mvn verify` passes on Linux and Windows, no display required *(passing on Windows; Linux is CI's to confirm)*
+- [x] **A2** — The four toggles read Log, Message, SOAP, REST; selecting one switches the view; the choice survives a restart
 - [ ] **A3** — Preferences opens with General, Log, Message and SOAP tabs; each mode's settings are editable regardless of which mode is selected
 - [ ] **A4** — A port-to-tail mapping can be added, edited and removed; invalid ports, malformed tails, and duplicates in either direction are rejected at entry with the reason visible
-- [ ] **A5** — Every setting in the §4.2 table survives a restart
-- [ ] **A6** — A hand-broken settings file — one bad mapping, one bad scalar, a duplicate tail, a BOM — loads everything else and logs what it dropped
+- [x] **A5** — Every setting in the §4.2 table survives a restart
+- [x] **A6** — A hand-broken settings file — one bad mapping, one bad scalar, a duplicate tail, a BOM — loads everything else and logs what it dropped
 - [ ] **A7** — Reset to defaults on each tab restores that tab's values and nothing else; the Log tab confirms before clearing mappings
-- [ ] **A8** — `docs/architecture.md` describes the code as it now stands
-- [ ] **A9** — Nothing outside `docs/` mentions JFXRibbon: not the package, window title, About dialog, settings directory, status payload, or jpackage output. The `ribbon` UI vocabulary (R28) is untouched and the app still themes correctly, which is what proves `ribbon.css` survived the rename
+- [x] **A8** — `docs/architecture.md` describes the code as it now stands
+- [x] **A9** — Nothing outside `docs/` mentions JFXRibbon: not the package, window title, About dialog, settings directory or jpackage output. (The status payload dropped off this list with the HTTP layer — Q10.) Remaining mentions in `README.md`, `CLAUDE.md`, `memory.md` and a `pom.xml` comment are deliberate statements of provenance. The `ribbon` UI vocabulary (R28) is untouched and the app still themes correctly, which is what proves `ribbon.css` survived the rename
 
 ## 11. Open questions
 
@@ -360,9 +370,9 @@ violate:
 | Q3  | ~~Confirm 8081 as the SOAP default.~~ **Answered 2026-08-29: accepted**                                                                                                                                                                                                                                                                                                                                                                  | —     | Closed                                                           |
 | Q4  | ~~What is a tail number?~~ **Answered 2026-08-29:** exactly six alphanumeric characters, no fixed prefix — `N12345` or `123456` both valid. Rule and consequences in §7                                                                                                                                                                                                                                                                  | —     | Closed                                                           |
 | Q8  | ~~Confirm the 0.1–10.0 playback range.~~ **Answered 2026-08-29: accepted**                                                                                                                                                                                                                                                                                                                                                               | —     | Closed                                                           |
-| Q10 | Should the loopback HTTP layer stay at all? It is inherited from the template, where it existed to demonstrate a Spring Boot context behind a JavaFX app. Data Blaster has real modes now — one of which is SOAP, which will want its own server. Keeping it means maintaining a second bound port and the DNS-rebinding filter that guards it; dropping it removes `web/`, two test classes, and the port-conflict fallback in `init()` | Bo    | No, but it gets more expensive to answer once SOAP mode is built |
-| Q5  | Is one mapping set global, or one per something else (per session, per profile)? §5 assumes global                                                                                                                                                                                                                                                                                                                                       | Bo    | No                                                               |
-| Q6  | Does REST ship as a visible placeholder toggle (R14) or not ship at all in v1?                                                                                                                                                                                                                                                                                                                                                           | Bo    | No                                                               |
+| Q10 | ~~Should the loopback HTTP layer stay at all?~~ **Answered 2026-08-29: no.** Removed in full — `web/`, its two test classes, the port-conflict fallback in `init()`, the `spring-boot-starter-webmvc` dependency and the `web-application-type=none` override on five test classes. `AppState.Snapshot` went with it: its only reader was the HTTP layer, so it was dead code maintained on every write. SOAP mode starts from its own configured port; architecture.md §3, §4 and §8 keep the reasoning that outlived the code | — | Closed |
+| Q5  | ~~Is one mapping set global, or one per something else?~~ **Answered 2026-08-29: global.** One mapping set, as §5 assumed. A second dimension on the file format would need its own decision | — | Closed |
+| Q6  | ~~Does REST ship as a visible placeholder toggle (R14) or not at all in v1?~~ **Answered 2026-08-29: it ships.** The toggle is live and labelled; the view behind it still has to say plainly that it is not implemented | — | Closed |
 | Q7  | R16 (contextual ribbon) is *Should*. In or out for v1?                                                                                                                                                                                                                                                                                                                                                                                   | Bo    | No                                                               |
 
 ## 12. Decision log
@@ -374,7 +384,7 @@ violate:
 | D3 | The selected mode persists, reversing `Settings`' documented exclusion | Leaving it unpersisted | The stated reason for the exclusion — placeholder views — no longer holds. The Javadoc must be rewritten, not just contradicted |
 | D4 | Keep the properties file; namespace keys by mode | JSON or YAML; a nested format | The store's whole rationale is a file a person can open, edit and delete. A flat namespaced file keeps that and keeps per-key tolerant reads. Costs an awkward prefix-scan for the mapping set |
 | D5 | Port as the mapping key (`log.mapping.<port>`) | An indexed list (`log.mapping.1.port` / `.tail`); one delimited value | Port uniqueness becomes a property of the format instead of a check someone has to remember. Costs the ability to store a mapping with no port, which is not a thing |
-| D6 | Mappings, message type and SOAP port stay out of `Snapshot`; only `mode` is added | Widening `Snapshot` to the full configuration | `Snapshot` is the boundary to an unauthenticated loopback API, and loopback separates hosts, not users. Keeping it narrow means a future endpoint cannot leak tail numbers by accident. Costs a second read path if a handler ever legitimately needs them |
+| D6 | ~~Mappings, message type and SOAP port stay out of `Snapshot`~~ **Superseded by Q10.** `Snapshot` was the boundary to an unauthenticated loopback API, and keeping it narrow meant a future endpoint could not leak tail numbers by accident. With the API removed the record had no reader at all, so it went too. The reasoning is preserved in architecture.md §4 for whoever rebuilds the projection when SOAP mode needs one — the narrowness was the point, not the record | Widening `Snapshot` to the full configuration; keeping the record with no reader | The decision held for as long as the thing it guarded existed |
 | D7 | Preferences as tabs, all modes always reachable | Showing only the current mode's settings; one long scrolling pane | Configuring a mode you are not running is the normal case, not the exception. Costs four FXML files and four controllers where there was one |
 | D8 | Per-tab Reset to defaults, with confirmation on the Log tab | One global reset; no reset | A global reset that silently clears a mapping table someone typed by hand is a different act from resetting a slider. Costs a confirmation step |
 | D9 | v1 configures the modes and implements none of them | Building Log mode alongside its settings | A shippable, testable increment with a defensible boundary — which the previous PRD explicitly lacked and carried as a risk. Costs the risk that the settings turn out wrong when behaviour arrives (R-3) |

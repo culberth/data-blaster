@@ -22,17 +22,19 @@ import org.springframework.context.ConfigurableApplicationContext;
 /**
  * Starts the real application context and checks the wiring rules that nothing else verifies.
  *
- * <p><strong>Why the web layer is switched off.</strong> {@code application.properties} binds port
- * 8080, so a plain context load here would fail on any machine already running the application —
- * and on a CI runner executing two jobs on one host. The HTTP layer has its own coverage in
- * {@code LoopbackHostFilterTest} and {@code StatusControllerTest}, neither of which needs a bound
- * socket, so nothing is lost by leaving it out of this test.
+ * <p><strong>A bare {@code @SpringBootTest}, with nothing switched off.</strong> Every
+ * context-loading test in this suite used to carry
+ * {@code properties = "spring.main.web-application-type=none"}, because the inherited HTTP layer
+ * bound port 8080 and a plain context load would fail on any machine already running the
+ * application — or on a CI runner executing two jobs on one host. The HTTP layer is gone and the
+ * project no longer depends on the web starter, so the context has no server to start and the
+ * override has nothing left to suppress.
  *
  * <p>This class starts no JavaFX toolkit. Spring instantiates controllers but never calls their
  * {@code initialize()} methods — that is {@code FXMLLoader}'s job, and it is covered by
  * {@code FxmlSmokeTest}.
  */
-@SpringBootTest(properties = "spring.main.web-application-type=none")
+@SpringBootTest
 class SpringContextTest {
 
     /** Every FXML-backed controller lives under here, including the {@code ribbon} subpackage. */

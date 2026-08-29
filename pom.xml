@@ -36,10 +36,15 @@
     </properties>
 
     <dependencies>
-        <!-- spring-boot-starter-webmvc brings spring-boot-starter in transitively. -->
+        <!--
+          The plain starter, not spring-boot-starter-webmvc. Spring is here for dependency
+          injection and the bean lifecycle, not for serving anything: the loopback HTTP layer this
+          project inherited from its template has been removed, so the web starter would only pull
+          an embedded Tomcat that nothing binds.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
         <dependency>

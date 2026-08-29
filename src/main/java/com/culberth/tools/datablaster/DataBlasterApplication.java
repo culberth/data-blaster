@@ -11,11 +11,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
-import java.net.BindException;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.boot.web.server.PortInUseException;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.core.NestedExceptionUtils;
 
 public class DataBlasterApplication extends Application {
 
@@ -23,50 +20,21 @@ public class DataBlasterApplication extends Application {
 
     private ConfigurableApplicationContext springContext;
 
-    /** True when the HTTP layer was dropped because its port was taken; surfaced in the title. */
-    private boolean httpLayerDisabled;
-
+    /**
+     * Boots Spring before any window exists.
+     *
+     * <p><strong>No try/catch here any more.</strong> This method used to catch a startup failure,
+     * check whether its most specific cause was a port conflict, and retry without the web layer —
+     * because an embedded Tomcat that could not bind its port would otherwise abort the launch and
+     * write its only diagnostic to a console the windowed build does not have. There is no embedded
+     * server now, so there is no port to conflict over and nothing left that a retry could fix. A
+     * failure here is a real bug and should propagate.
+     */
     @Override
     public void init() {
-        String[] args = getParameters().getRaw().toArray(new String[0]);
-        try {
-            springContext = startSpring(args);
-        } catch (RuntimeException e) {
-            // Retry ONLY for a port conflict. The HTTP layer is a companion feature the desktop UI
-            // does not need, and aborting launch because some other process holds the port would
-            // leave the user with a windowed build that never opens and writes its only diagnostic
-            // to a console that does not exist. Any other startup failure is a real bug: rethrow it
-            // rather than mislabelling it as a web-server problem and booting the context twice.
-            if (!isPortConflict(e)) {
-                throw e;
-            }
-            springContext = startSpring(args, "--spring.main.web-application-type=none");
-            httpLayerDisabled = true;
-
-            // Logged after the replacement context is up, and that ordering is the whole point.
-            // Spring Boot tears its logging system down when a context fails, so anything logged
-            // between the failure and the next context starting is written to a Logback that has
-            // been stopped and is silently discarded. This warning used to sit above the retry and
-            // never appeared anywhere — in the console build that exists specifically to show
-            // start-up diagnostics.
-            LOG.log(System.Logger.Level.WARNING,
-                    "Port already in use; started without the HTTP layer", e);
-        }
-    }
-
-    /** True if {@code e} was caused by the web server failing to bind its port. */
-    private static boolean isPortConflict(Throwable e) {
-        Throwable cause = NestedExceptionUtils.getMostSpecificCause(e);
-        return cause instanceof PortInUseException || cause instanceof BindException;
-    }
-
-    private ConfigurableApplicationContext startSpring(String[] args, String... extraArgs) {
-        String[] all = new String[args.length + extraArgs.length];
-        System.arraycopy(args, 0, all, 0, args.length);
-        System.arraycopy(extraArgs, 0, all, args.length, extraArgs.length);
-        return new SpringApplicationBuilder(AppConfig.class)
+        springContext = new SpringApplicationBuilder(AppConfig.class)
                 .headless(false)
-                .run(all);
+                .run(getParameters().getRaw().toArray(new String[0]));
     }
 
     @Override
@@ -92,9 +60,7 @@ public class DataBlasterApplication extends Application {
             Parent root = viewLoader.loadParent("/fxml/main.fxml");
             Scene scene = viewLoader.newScene(root, 1000, 650);
 
-            // The fallback above is otherwise invisible in the windowed build, which has no
-            // console for the warning; say so where the user can actually see it.
-            primaryStage.setTitle(httpLayerDisabled ? "Data Blaster (HTTP layer disabled)" : "Data Blaster");
+            primaryStage.setTitle("Data Blaster");
             primaryStage.getIcons().add(appIcon());
             primaryStage.setScene(scene);
             primaryStage.setMinWidth(640);
@@ -102,8 +68,8 @@ public class DataBlasterApplication extends Application {
             primaryStage.show();
         } catch (Exception e) {
             // JavaFX only calls stop() when start() completed, so without this the already-booted
-            // Spring context and its non-daemon Tomcat threads would keep the JVM alive with no
-            // window ever appearing.
+            // Spring context would be left open with no window ever appearing — and its shutdown
+            // hooks, including the settings flush, would never run.
             LOG.log(System.Logger.Level.ERROR, "Failed to start the Data Blaster UI", e);
             reportFatal(e);
             closeSpringContext();
