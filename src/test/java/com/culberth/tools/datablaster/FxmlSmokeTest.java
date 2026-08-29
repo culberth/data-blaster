@@ -38,7 +38,7 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 class FxmlSmokeTest {
 
     /** The FXML files that exist today, asserted so a glob matching nothing cannot pass quietly. */
-    private static final int EXPECTED_FXML_COUNT = 10;
+    private static final int EXPECTED_FXML_COUNT = 12;
 
     // Field injection rather than a constructor parameter: Spring's JUnit extension only
     // autowires constructor parameters that carry @Autowired themselves (ApplicationContext types

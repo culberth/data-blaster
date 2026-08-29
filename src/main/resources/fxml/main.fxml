@@ -59,7 +59,13 @@
                                 hbarPolicy="AS_NEEDED" vbarPolicy="NEVER">
                         <HBox styleClass="ribbon-content">
                             <fx:include source="ribbon/mode-group.fxml"/>
-                            <fx:include source="ribbon/tools-group.fxml"/>
+                            <!--
+                              The contextual slot: whichever group follows the selected mode, or
+                              nothing at all for the modes that have none. It swaps its own content
+                              rather than being swapped by MainController, so it is an ordinary
+                              include here like the fixed groups either side of it.
+                            -->
+                            <fx:include source="ribbon/contextual-group.fxml"/>
                             <fx:include source="ribbon/appearance-group.fxml"/>
                         </HBox>
                     </ScrollPane>

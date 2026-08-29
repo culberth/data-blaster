@@ -5,8 +5,8 @@ here exist to prevent specific defects that a peer review found in earlier versi
 
 | | |
 |---|---|
-| **Describes** | `rename-to-data-blaster`, after the mode model and mode-scoped settings landed |
-| **Size** | ~2,720 lines of main Java, ~2,630 of test, 10 FXML files, one stylesheet |
+| **Describes** | `rename-to-data-blaster`, after the contextual ribbon landed |
+| **Size** | ~3,100 lines of main Java, ~3,000 of test, 12 FXML files, one stylesheet |
 | **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (no web layer), Maven |
 | **Origin** | Forked from JFXRibbon, which was written as a template. See [PRD.md](PRD.md) |
 
@@ -44,9 +44,11 @@ below: where duplication is tolerated, and where it is not.
                      |
                      v
   controller   MainController · Preferences/About · the four mode views
+               ribbon: Mode · contextual slot (Log | Message) · Appearance
       |              |
       |              v
-      |         ui   StageRegistry · ViewRegistry · ViewSwitcher · DialogService
+      |         ui   StageRegistry · ViewRegistry · RibbonGroupRegistry · ViewSwitcher
+      |              DialogService · LogScale
       |              |
       v              v
         model        AppState · Mode · Settings  (imports nothing from the application)
@@ -63,7 +65,7 @@ depends on `model` and on nothing else — is the one to reinstate if SOAP mode 
 |---|---|---|
 | `com.culberth.tools.datablaster` | Entry points, Spring config, FXML loading | `ui`, `controller` |
 | `.model` | `AppState`; `Mode`, `MessageType`, `Theme`, `PortTailMapping`; the settings record, store and service | nothing in the app |
-| `.ui` | Window ownership, view registry, view swapping, dialogs | `model` |
+| `.ui` | Window ownership, the two registries, view swapping, dialogs, the log-track scale | `model` |
 | `.controller` | The shell and the content views | `ui`, `model` |
 | `.controller.ribbon` | One controller per ribbon group | `ui`, `model` |
 
@@ -230,6 +232,63 @@ application's own markup, where a wrong value is a defect to surface rather than
 
 Adding a ribbon group is a new FXML, a new controller, and one `<fx:include>` line. No edit to
 `MainController`; no edit to another group.
+
+### The contextual slot
+
+Three groups are fixed — Mode, the contextual slot, and Appearance — and the middle one swaps its
+contents with `currentMode`. Log shows playback speed and the log folder; Message shows its type;
+SOAP and REST show nothing.
+
+**The slot swaps itself.** `ContextualGroupController` observes `currentMode`, resolves it through
+`RibbonGroupRegistry`, and replaces its own children. Putting that logic in `MainController` was the
+obvious move and would have broken the property this section opens with: the shell includes the slot
+with one `<fx:include>` exactly like the fixed groups, and knows nothing about what goes in it. It
+is the same shape as the content-area swap, one level down.
+
+**Only Log and Message have a group, by decision.** A ribbon is for controls reached for repeatedly.
+Playback speed is scrubbed and message type is flipped between sends; SOAP's port is set once and
+belongs in Preferences, and REST has no behaviour to configure. Giving every mode a group would fill
+the ribbon with controls nobody reaches for and put a set-once port one mis-click away.
+`RibbonGroupRegistry` is a separate class from `ViewRegistry` for exactly this reason: a missing
+content view is a defect and throws, while a missing ribbon group is the normal answer and comes
+back empty. One class with two lookups behaving oppositely on a miss would read worse than two.
+
+**An empty slot un-manages itself.** Left visible-but-empty it would reserve width, leaving a hole
+with the ribbon's spacing on both sides of it — a layout bug no assertion about children would
+catch, which is why `ContextualRibbonTest` checks `isManaged()` directly.
+
+**A group that fails to load is logged, not raised.** Unlike a content view, which gets a dialog, a
+ribbon group failing during shell construction would put an alert on screen before there is a window
+to own it — and `FxmlSmokeTest` loads every one of these files through the real factory, so a broken
+group fails the build instead.
+
+### The log-scaled slider
+
+Playback Speed Factor is on the ribbon as a slider whose track is **logarithmic**, and in Preferences
+as a `Spinner` for typing an exact number. Neither owns the value; both read and write `AppState`.
+
+The track runs 0–1 in position units, not multipliers — `LogScale` converts, and nothing outside
+`LogGroupController` ever sees a position. On a linear 0.1–10.0 track the default of 1.0 sits at 9%
+of the travel, with every slow-motion setting crushed into the leftmost tenth; on a log track it is
+dead centre, because 1.0 is the geometric mean of the bounds. Halving and doubling then cover equal
+distance, which is what a multiplier means.
+
+Two consequences worth knowing:
+
+- **The scale rounds, and that rounding is stored.** A log conversion lands on values like
+  `1.0000000000000002`. Rounding in `LogScale.valueAt(position, decimals)` rather than in the
+  read-out's format is deliberate: the rounded number is what reaches the settings file, so
+  formatting it away would leave the file holding noise the UI never showed.
+- **This control follows `AppState` rather than reading it once.** Most controls here read at
+  `initialize()` and only write afterwards. This one also listens, because Preferences can change
+  the speed while the group exists — closing that dialog would otherwise leave the read-out showing
+  the new value beside a thumb at the old position, and the next nudge would throw the new value
+  away. That two-way link needs a re-entrancy guard: the slider writes a *rounded* speed, which
+  converts back to a position that is not bit-identical to where the thumb is, so without the guard
+  the thumb jumps under the cursor mid-drag.
+
+Tick marks are deliberately off. Evenly spaced ticks on a logarithmic track would label positions
+that are not evenly spaced in value; the numeric read-out is the scale instead.
 
 ### Two contracts a new group must honour
 
@@ -436,19 +495,19 @@ pre-emptively, because a character class that also accepts `------` has stopped 
 
 ### Two surfaces, one value
 
-The log folder appears both in the ribbon's Tools group and in Preferences. Neither holds a copy —
+The log folder appears both in the ribbon's Log group and in Preferences. Neither holds a copy —
 both read from and write to `AppState`, and both read-outs are *bound* rather than assigned, so they
 track it without being rebuilt.
 
-It is the only setting in both places now. Playback Speed Factor left the ribbon with the Appearance
-group's slider, for two reasons: it is a Log-mode setting rather than an appearance one, and as a
-multiplier over 0.1–10.0 it is not a slider at all — a linear track puts `1.0`, the default and the
-value most returned to, at 9% of its travel with the entire slow-motion range crushed to the left of
-it. It is a `Spinner<Double>` in Preferences, which takes an exact value and suits a setting
-configured once rather than scrubbed live. If quick access is ever wanted on the ribbon it belongs
-in a mode-aware group, on a log scale.
+Playback Speed Factor is in both places too, but not as the same control: a log-scaled slider in the
+Log ribbon group for scrubbing, a `Spinner<Double>` in Preferences for typing an exact number. It
+left the *Appearance* group — it is a Log-mode setting, not an appearance one — and the Appearance
+group is now content opacity alone, which is not persisted at all. See §6 for why the ribbon control
+is logarithmic.
 
-The Appearance group is left with content opacity, which is not persisted at all.
+The log folder likewise moved out of the always-visible Tools group, which had nothing else in it
+and was deleted. Offering a Log-mode setting while SOAP mode is selected was the inconsistency the
+contextual ribbon exists to remove.
 
 Preferences applies edits immediately and closes with **Close**, not OK/Cancel. That is not a
 shortcut: a Cancel needs somewhere to hold uncommitted edits, and that buffer is a second copy of
@@ -542,7 +601,7 @@ back as its default while the log folder on the next line restored perfectly.
 
 ## 9. Testing
 
-181 tests, no display required. Run on Linux and Windows for every push — see §10.
+215 tests, no display required. Run on Linux and Windows for every push — see §10.
 
 | Suite | Covers | Toolkit |
 |---|---|---|
@@ -550,9 +609,12 @@ back as its default while the log folder on the next line restored perfectly.
 | `PortTailMappingTest` | The tail format, the port range, and uniqueness in both directions — including that two tails differing only in case collide rather than both being accepted | no |
 | `StoredEnumParsingTest` | The tolerant-parse contract `Theme`, `Mode` and `MessageType` share: every constant round-trips, unknown values fall back rather than throwing, and the stored form is not the shown form | no |
 | `ViewRegistryTest` | That every `Mode` resolves to a view, that no two share one, and the miss message | no |
+| `RibbonGroupRegistryTest` | That only Log and Message carry a contextual group, that a mode without one gets an empty `Optional` rather than a throw, and that every registered group is actually on the classpath | no |
+| `LogScaleTest` | The log-track arithmetic: real time at mid-track, halving and doubling covering equal travel, round-trips, and that no rounded value falls outside what the store accepts | no |
+| `ContextualRibbonTest` | That the ribbon follows the mode: the right group for the mode already selected when the slot is built, a swap on change, and an empty *unmanaged* slot for SOAP and REST | **yes** |
 | `SpringContextTest` | That the context starts, that every controller under `controller` is prototype-scoped, and that the shared services are not | no |
 | `ModeGroupViewIdTest` | That every `userData` in the ribbon names a real `Mode`, that every `Mode` has a toggle, that each resolves through `ViewRegistry`, and that the toggle marked selected is the default mode — read from the FXML as XML | no |
-| `FxmlSmokeTest` | That all ten FXML files load through the real Spring-backed controller factory | **yes** |
+| `FxmlSmokeTest` | That all twelve FXML files load through the real Spring-backed controller factory | **yes** |
 | `SettingsStoreTest` | The tolerance rules, against hand-written files: missing, corrupt, out of range, BOM-prefixed, non-ASCII, plus the mapping table entry by entry (bad port, bad tail, duplicate tail, a port spelled two ways) and that the template's keys are unknown keys | no |
 | `SettingsServiceTest` | Restore of every mode's settings, coalesced writes, the shutdown flush, that binding does not write back what it just read, and that a mapping edit persists at all | no |
 | `SettingsRestoreOrderTest` | That restoring *before* the controls are built is what puts stored values on them — including the negative case. Its subjects are the Preferences spinner and the Mode ribbon group, both of which read `AppState` once in `initialize()` | **yes** |

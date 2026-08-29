@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.Group?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Rectangle?>
+
+<!--
+  The "Log" ribbon group: shown only while Log mode is selected.
+
+  Playback Speed is a slider again, but not the linear one the template had. The track is
+  logarithmic (see LogScale): 0.1x at the left, 10x at the right, and real time exactly in the
+  middle, so halving and doubling cover equal travel. A linear 0.1-10.0 track would strand 1.0 at
+  9% of its length with every slow-motion setting crushed to the left of it.
+
+  The slider therefore runs 0-1 in track units, not in multipliers — the controller converts, and
+  the read-out beside it shows the real value. Preferences keeps a Spinner for the same setting,
+  where an exact typed number matters more than scrubbing.
+
+  The log folder lives here rather than in a permanently visible group, because it is a Log-mode
+  setting and there is no reason to offer it while running Message mode.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.LogGroupController"
+      styleClass="ribbon-group">
+
+    <HBox styleClass="ribbon-group-buttons" spacing="12" alignment="CENTER_LEFT">
+        <VBox alignment="CENTER" spacing="2">
+            <Label fx:id="playbackSpeedCaption" text="Playback Speed"
+                   styleClass="ribbon-slider-label"/>
+            <HBox alignment="CENTER" spacing="6">
+                <!--
+                  min/max are track position, not speed. Tick marks are off: evenly spaced ticks on
+                  a logarithmic track would label positions that are not evenly spaced in value,
+                  which is worse than no ticks at all. The read-out is the scale.
+                -->
+                <Slider fx:id="playbackSpeedSlider" accessibleText="Playback speed factor"
+                        min="0.0" max="1.0" value="0.5"
+                        showTickMarks="false" showTickLabels="false"
+                        prefWidth="140" minWidth="110"/>
+                <Label fx:id="playbackSpeedValueLabel" text="1.00x" styleClass="ribbon-readout"
+                       minWidth="46"/>
+                <Button fx:id="playbackSpeedResetButton" text="Reset"
+                        styleClass="ribbon-inline-button" onAction="#onResetPlaybackSpeed"
+                        accessibleText="Reset playback speed to real time"/>
+            </HBox>
+        </VBox>
+
+        <Button text="Log Folder" contentDisplay="TOP" styleClass="ribbon-button"
+                onAction="#onChooseLogFolder">
+            <graphic>
+                <Group>
+                    <Rectangle styleClass="ribbon-icon-shape" x="0" y="3" width="22" height="12" arcWidth="2" arcHeight="2" fill="TRANSPARENT" strokeWidth="1.5"/>
+                    <Rectangle styleClass="ribbon-icon-shape" x="0" y="0" width="9" height="4" arcWidth="2" arcHeight="2" fill="TRANSPARENT" strokeWidth="1.5"/>
+                </Group>
+            </graphic>
+        </Button>
+        <!--
+          No accessibleText here: on a Label it would override the text a screen reader speaks,
+          hiding the very path this read-out exists to show.
+        -->
+        <Label fx:id="logFolderLabel" text="(none selected)" styleClass="ribbon-readout"
+               maxWidth="220" minWidth="80" HBox.hgrow="NEVER"
+               textOverrun="CENTER_ELLIPSIS"/>
+    </HBox>
+    <Label text="Log" styleClass="ribbon-group-title"/>
+</VBox>

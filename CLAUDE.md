@@ -14,11 +14,11 @@ directory `tool-boilerplate` and the GitHub remote are the last inherited names,
 is a manual step outside the build.
 
 **The modes are real; their views and their editors are not yet.** `Mode` is a first-class enum,
-`ViewRegistry` is keyed by it, the selected mode persists, and every mode's settings persist under
-their own key namespace. What remains from the PRD: the tabbed Preferences rebuild (General / Log /
-Message / SOAP), the port-to-tail `TableView`, per-tab Reset, and the four mode views including an
-honest REST placeholder. Until the tabs land, Message's type, SOAP's port and Log's mapping table
-persist correctly with nowhere to be edited.
+`ViewRegistry` is keyed by it, the selected mode persists, every mode's settings persist under their
+own key namespace, and the ribbon follows the selected mode. What remains from the PRD: the tabbed
+Preferences rebuild (General / Log / Message / SOAP), the port-to-tail `TableView`, per-tab Reset,
+and the four mode views including an honest REST placeholder. Until the tabs land, SOAP's port and
+Log's mapping table persist correctly with nowhere to be edited.
 
 **The loopback HTTP layer has been removed** (PRD Q10, answered no). There is no `web` package, no
 embedded Tomcat, and no `spring-boot-starter-webmvc` dependency. If you find references to
@@ -30,7 +30,7 @@ are. `ribbon.css` is loaded by name and parsed by name in `ThemeContrastTest`, s
 on `ribbon` breaks theming at runtime rather than at compile time.
 
 - [docs/architecture.md](docs/architecture.md) — how the **current** code works and why. Accurate as
-  of the HTTP-layer removal. Keep it that way: PRD requirement R21 says architecture.md is updated in
+  of the contextual ribbon. Keep it that way: PRD requirement R21 says architecture.md is updated in
   the same change as the code it describes, not as a follow-up.
 - [docs/PRD.md](docs/PRD.md) — what is being **built next**: the four modes and their settings. v1
   makes the modes configurable and deliberately implements none of their behaviour. That boundary is
@@ -81,7 +81,8 @@ leak pass locally and fail only on CI.
 ```
 bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
   -> controller (MainController, Preferences/About, the four mode views)
-       -> ui (StageRegistry, ViewRegistry, ViewSwitcher, DialogService)
+       -> ui (StageRegistry, ViewRegistry, RibbonGroupRegistry, ViewSwitcher,
+              DialogService, LogScale)
             -> model (AppState, Mode, Settings — imports nothing from the app)
 ```
 
@@ -131,6 +132,21 @@ needed. A group's `initialize()` runs before the shell's (FXMLLoader builds dept
 *subscribe* to `AppState` there but must not *publish*, since the shell hasn't run yet and will
 overwrite it.
 
+**The ribbon is contextual.** Three fixed slots — Mode, the contextual slot, Appearance — and the
+middle one swaps with `currentMode` via `ContextualGroupController` + `RibbonGroupRegistry`. Only
+`LOG` and `MESSAGE` have a group; SOAP and REST leave the slot empty **and un-managed**, so it
+reserves no width. The slot swaps *itself* rather than being swapped by `MainController` — that is
+what keeps "adding a group needs no shell edit" true. `RibbonGroupRegistry` is separate from
+`ViewRegistry` because a missing content view is a defect (throws) while a missing ribbon group is
+normal (empty `Optional`).
+
+**Playback Speed has two controls and neither owns the value:** a log-scaled slider in the Log
+ribbon group (`LogScale` converts 0–1 track position <-> 0.1–10.0 multiplier, putting 1.0 mid-track)
+and a `Spinner<Double>` in Preferences. `LogScale.valueAt(position, decimals)` rounds, and the
+rounded number is what gets stored — don't move that rounding into the display format. The slider
+also *follows* `AppState` rather than reading it once, which needs the re-entrancy guard in
+`LogGroupController`.
+
 **Adding a mode setting:** a field on `AppState` (read-only accessor + guarded mutator), a component
 on the matching nested record in `Settings`, a namespaced key with a tolerant read in
 `SettingsStore`, and a restore + subscribe line in `SettingsService.bind()` — restore before
@@ -138,9 +154,9 @@ subscribe, or every launch rewrites the file.
 
 ## Testing
 
-181 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
+215 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
 that need a real scene graph (`FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`,
-`ThemeSwitchingTest`) initialize the JavaFX toolkit — everything else, especially `AppStateTest`, must
+`ThemeSwitchingTest`, `ContextualRibbonTest`) initialize the JavaFX toolkit — everything else, especially `AppStateTest`, must
 stay toolkit-free so CI's headless runner keeps working. See the test table in
 [docs/architecture.md §9](docs/architecture.md) for what each suite covers.
 

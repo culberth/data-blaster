@@ -7,9 +7,10 @@ ribbon, each with its own persisted configuration.
 
 > **Status: the modes are real; they do not do anything yet.** Selecting a mode switches the view and
 > the choice survives a restart, and every mode's settings persist under their own namespace in the
-> settings file. What is still missing is the interface to most of them — Preferences is one flat
-> pane, so Message's type, SOAP's port and Log's port-to-tail table persist correctly with nowhere to
-> be edited — and the four content views are still abstract placeholders.
+> settings file, and the ribbon changes with the mode you are in. What is still missing is the
+> interface to some of them — Preferences is one flat pane, so SOAP's port and Log's port-to-tail
+> table persist correctly with nowhere to be edited — and the four content views are still abstract
+> placeholders.
 >
 > No mode has any behaviour: nothing reads a log, sends a message or serves SOAP. That boundary is
 > deliberate and is specified in [docs/PRD.md](docs/PRD.md), which is the work in progress.
@@ -28,7 +29,7 @@ mvn spring-boot:run
 mvn test
 ```
 
-The test suite is headless — 181 tests, no display required — so it runs unchanged on a build agent.
+The test suite is headless — 215 tests, no display required — so it runs unchanged on a build agent.
 To run one class or one method:
 
 ```bash

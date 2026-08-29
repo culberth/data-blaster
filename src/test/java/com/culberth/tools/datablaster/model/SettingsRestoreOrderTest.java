@@ -53,7 +53,7 @@ class SettingsRestoreOrderTest {
 
     private static final String PREFERENCES = "/fxml/preferences.fxml";
     private static final String MODE_GROUP = "/fxml/ribbon/mode-group.fxml";
-    private static final String TOOLS_GROUP = "/fxml/ribbon/tools-group.fxml";
+    private static final String LOG_GROUP = "/fxml/ribbon/log-group.fxml";
 
     /** Deliberately neither the default nor a value any control starts at. */
     private static final double STORED_PLAYBACK_SPEED = 3.5;
@@ -150,7 +150,7 @@ class SettingsRestoreOrderTest {
                     "the ribbon should highlight the stored mode, not the toggle marked "
                             + "selected in the markup");
 
-            Label logFolder = (Label) viewLoader.loadParent(TOOLS_GROUP).lookup("#logFolderLabel");
+            Label logFolder = (Label) viewLoader.loadParent(LOG_GROUP).lookup("#logFolderLabel");
             assertNotNull(logFolder, "the log folder read-out should be in the group's node tree");
             assertEquals(new File(storedFolder).getAbsolutePath(), logFolder.getText(),
                     "the read-out should show the stored folder, not \"(none selected)\"");
@@ -194,7 +194,7 @@ class SettingsRestoreOrderTest {
                     playbackSpeedOf(viewLoader.loadParent(PREFERENCES)), 0.0001);
             assertSame(Settings.DEFAULTS.mode(), selectedModeOf(viewLoader.loadParent(MODE_GROUP)));
 
-            Label logFolder = (Label) viewLoader.loadParent(TOOLS_GROUP).lookup("#logFolderLabel");
+            Label logFolder = (Label) viewLoader.loadParent(LOG_GROUP).lookup("#logFolderLabel");
             assertEquals("(none selected)", logFolder.getText());
         });
     }

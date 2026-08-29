@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.ChoiceBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The "Message" ribbon group: shown only while Message mode is selected.
+
+  One control, because Message mode has one setting. It is here rather than only in Preferences
+  because the message type is the thing you would change between sends, which is what a ribbon is
+  for — unlike SOAP's port, which is set once and has no group at all.
+
+  The choices are populated from MessageType.values() in the controller, not listed here, so adding
+  a constant stays a one-line change in the enum.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.MessageGroupController"
+      styleClass="ribbon-group">
+
+    <HBox styleClass="ribbon-group-buttons" spacing="6" alignment="CENTER_LEFT">
+        <VBox alignment="CENTER_LEFT" spacing="2">
+            <Label fx:id="messageTypeCaption" text="Message Type" styleClass="ribbon-slider-label"/>
+            <ChoiceBox fx:id="messageTypeChoice" accessibleText="Message type" prefWidth="140"/>
+        </VBox>
+    </HBox>
+    <Label text="Message" styleClass="ribbon-group-title"/>
+</VBox>

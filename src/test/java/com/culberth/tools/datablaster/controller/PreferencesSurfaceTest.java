@@ -45,7 +45,7 @@ import org.springframework.context.ApplicationContext;
 class PreferencesSurfaceTest {
 
     private static final String PREFERENCES = "/fxml/preferences.fxml";
-    private static final String TOOLS_GROUP = "/fxml/ribbon/tools-group.fxml";
+    private static final String LOG_GROUP = "/fxml/ribbon/log-group.fxml";
     private static final String APPEARANCE_GROUP = "/fxml/ribbon/appearance-group.fxml";
 
     @Autowired
@@ -134,7 +134,7 @@ class PreferencesSurfaceTest {
     void bothSurfacesShowTheSameLogFolderLive() {
         HeadlessToolkit.onFxThread(() -> {
             Parent preferences = viewLoader.loadParent(PREFERENCES);
-            Parent ribbon = viewLoader.loadParent(TOOLS_GROUP);
+            Parent ribbon = viewLoader.loadParent(LOG_GROUP);
 
             Label inDialog = (Label) preferences.lookup("#logFolderLabel");
             Label inRibbon = (Label) ribbon.lookup("#logFolderLabel");
