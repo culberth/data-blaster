@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The Log mode view. It shows the mode's live configuration and says plainly that the mode has
+  no behaviour yet, which is the honest thing for a placeholder to do.
+
+  The read-outs are bound to AppState, not assigned, so editing a setting in the ribbon or in
+  Preferences is visible here without the view being rebuilt — which is also what demonstrates
+  that the settings plumbing works end to end.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.LogViewController"
+      spacing="14" VBox.vgrow="ALWAYS">
+    <padding>
+        <Insets top="28" right="28" bottom="28" left="28"/>
+    </padding>
+
+    <Label text="Log" styleClass="mode-view-title"/>
+    <Label text="Configured here and in Preferences; it does not do anything yet. The settings below are live — they are what this mode will use once it is built." styleClass="mode-view-note" wrapText="true"/>
+
+    <VBox spacing="6">
+        <HBox spacing="8">
+            <Label text="Log folder" styleClass="mode-view-caption" minWidth="130"/>
+            <Label fx:id="logFolderValue" styleClass="mode-view-value" wrapText="true"/>
+        </HBox>
+        <HBox spacing="8">
+            <Label text="Playback speed" styleClass="mode-view-caption" minWidth="130"/>
+            <Label fx:id="playbackSpeedValue" styleClass="mode-view-value" wrapText="true"/>
+        </HBox>
+        <HBox spacing="8">
+            <Label text="Port mappings" styleClass="mode-view-caption" minWidth="130"/>
+            <Label fx:id="mappingCountValue" styleClass="mode-view-value" wrapText="true"/>
+        </HBox>
+    </VBox>
+</VBox>

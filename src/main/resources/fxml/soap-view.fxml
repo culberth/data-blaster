@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The SOAP mode view: its one setting, and an honest note that the mode does nothing yet.
+
+  The port is shown but nothing binds it. Whether it is free is a bind-time question, and the
+  behaviour that would ask it does not exist.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.SoapViewController"
+      spacing="14" VBox.vgrow="ALWAYS">
+    <padding>
+        <Insets top="28" right="28" bottom="28" left="28"/>
+    </padding>
+
+    <Label text="SOAP" styleClass="mode-view-title"/>
+    <Label text="Configured here and in Preferences; it does not do anything yet. The settings below are live — they are what this mode will use once it is built." styleClass="mode-view-note" wrapText="true"/>
+
+    <VBox spacing="6">
+        <HBox spacing="8">
+            <Label text="Listen port" styleClass="mode-view-caption" minWidth="130"/>
+            <Label fx:id="portValue" styleClass="mode-view-value" wrapText="true"/>
+        </HBox>
+    </VBox>
+</VBox>

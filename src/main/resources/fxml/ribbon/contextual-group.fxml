@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.HBox?>
+
+<!--
+  The slot in the ribbon that follows the selected mode.
+
+  Deliberately empty markup: what goes in here is log-group.fxml or message-group.fxml, loaded by
+  ContextualGroupController when the mode changes. SOAP and REST have no group, and this slot then
+  un-manages itself so it reserves no width.
+
+  The root is the host itself rather than a wrapper around one, so the swapped-in group's own
+  "ribbon-group" styling is what the ribbon lays out — a container of our own here would add a
+  second box around every contextual group and double its padding.
+-->
+<HBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.ContextualGroupController"
+      fx:id="groupHost"/>

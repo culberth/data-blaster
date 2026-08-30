@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.String?>
+<?import javafx.scene.Group?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Line?>
+<?import javafx.scene.shape.Rectangle?>
+
+<!--
+  The "Mode" ribbon group. Each toggle carries the name of the Mode constant it selects in its
+  userData, so the mode-to-button mapping is declared here rather than hardcoded in four handler
+  methods. ModeGroupViewIdTest reads this file and asserts every value parses to a real constant —
+  the userData is a string in markup, and it is the one half of this wiring javac cannot check.
+
+  The icons are still the template's four abstract layout glyphs. They say nothing about Log,
+  Message, SOAP or REST; drawing four that do belongs with the mode views, not with the wiring.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.ModeGroupController"
+      styleClass="ribbon-group">
+    <fx:define>
+        <ToggleGroup fx:id="modeGroup"/>
+    </fx:define>
+
+    <HBox styleClass="ribbon-group-buttons" spacing="4">
+        <ToggleButton text="Log" contentDisplay="TOP" styleClass="ribbon-button"
+                      toggleGroup="$modeGroup" selected="true" onAction="#onModeSelected">
+            <userData><String fx:value="LOG"/></userData>
+            <graphic>
+                <Group>
+                    <Rectangle styleClass="ribbon-icon-shape" x="0" y="0" width="22" height="16" arcWidth="3" arcHeight="3" fill="TRANSPARENT" strokeWidth="1.5"/>
+                </Group>
+            </graphic>
+        </ToggleButton>
+        <ToggleButton text="Message" contentDisplay="TOP" styleClass="ribbon-button"
+                      toggleGroup="$modeGroup" onAction="#onModeSelected">
+            <userData><String fx:value="MESSAGE"/></userData>
+            <graphic>
+                <Group>
+                    <Rectangle styleClass="ribbon-icon-shape" x="0" y="0" width="22" height="16" arcWidth="3" arcHeight="3" fill="TRANSPARENT" strokeWidth="1.5"/>
+                    <Line styleClass="ribbon-icon-shape" startX="11" startY="0" endX="11" endY="16" strokeWidth="1.5"/>
+                </Group>
+            </graphic>
+        </ToggleButton>
+        <ToggleButton text="SOAP" contentDisplay="TOP" styleClass="ribbon-button"
+                      toggleGroup="$modeGroup" onAction="#onModeSelected">
+            <userData><String fx:value="SOAP"/></userData>
+            <graphic>
+                <Group>
+                    <Rectangle styleClass="ribbon-icon-shape" x="0" y="0" width="22" height="16" arcWidth="3" arcHeight="3" fill="TRANSPARENT" strokeWidth="1.5"/>
+                    <Line styleClass="ribbon-icon-shape" startX="11" startY="0" endX="11" endY="16" strokeWidth="1.5"/>
+                    <Line styleClass="ribbon-icon-shape" startX="0" startY="8" endX="22" endY="8" strokeWidth="1.5"/>
+                </Group>
+            </graphic>
+        </ToggleButton>
+        <ToggleButton text="REST" contentDisplay="TOP" styleClass="ribbon-button"
+                      toggleGroup="$modeGroup" onAction="#onModeSelected">
+            <userData><String fx:value="REST"/></userData>
+            <graphic>
+                <Group>
+                    <!--
+                      Invisible 22x16 bounding box so this icon occupies the same height as the
+                      three rectangle-based ones; matching the stroke weight alone still left the
+                      glyph 4px shorter, which pushed the fourth caption 2px above its siblings.
+                    -->
+                    <Rectangle x="0" y="0" width="22" height="16" fill="TRANSPARENT" stroke="TRANSPARENT" strokeWidth="1.5"/>
+                    <Line styleClass="ribbon-icon-shape" startX="0" startY="2" endX="22" endY="2" strokeWidth="1.5"/>
+                    <Line styleClass="ribbon-icon-shape" startX="0" startY="8" endX="22" endY="8" strokeWidth="1.5"/>
+                    <Line styleClass="ribbon-icon-shape" startX="0" startY="14" endX="22" endY="14" strokeWidth="1.5"/>
+                </Group>
+            </graphic>
+        </ToggleButton>
+    </HBox>
+    <Label text="Mode" styleClass="ribbon-group-title"/>
+</VBox>
