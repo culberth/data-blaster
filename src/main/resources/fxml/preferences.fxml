@@ -2,95 +2,61 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
-<?import javafx.scene.control.ChoiceBox?>
-<?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Separator?>
-<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
 <!--
-  The canonical surface for the settings that persist. Every control here writes the same AppState
-  the ribbon does — there is no second copy of the values.
+  The canonical surface for the settings that persist, one tab per scope.
 
+  Every control here writes the same AppState the ribbon does; there is no second copy of any value.
   Edits apply immediately, so the button is Close rather than OK/Cancel: a Cancel would need
   somewhere to hold uncommitted edits, and that buffer is exactly the duplicated state this dialog
-  was reworked to remove. Reset to defaults is the way back.
+  was reworked to remove. Reset to defaults is the way back, and it is per tab.
 
-  Still one flat pane. Message mode's type, SOAP's port and Log's port-to-tail table are settings
-  with nowhere yet to be edited; the tabbed rebuild (General / Log / Message / SOAP) is the next
-  change, and this file is what it replaces.
+  Tabs rather than only the current mode's settings: configuring Message mode while running in Log
+  mode is the normal case, not the exception, and a dialog whose contents change shape under the
+  user is worse than four tabs.
+
+  REST has no tab because it has no settings. A tab that said "nothing here" would be a promise that
+  something is coming; the mode toggle already carries that message.
+
+  Each tab is its own FXML with its own prototype-scoped controller, matching the pattern the ribbon
+  groups use. This file wires them together and owns nothing but the Close button.
 -->
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
       fx:controller="com.culberth.tools.datablaster.controller.PreferencesController"
-      spacing="14" prefWidth="440">
+      spacing="12" prefWidth="520" prefHeight="470">
     <padding>
-        <Insets top="16" right="16" bottom="16" left="16"/>
+        <Insets top="14" right="14" bottom="14" left="14"/>
     </padding>
 
     <!--
       No "Preferences" heading: the title bar already says it, and repeating it costs a line of
-      vertical space to tell the user something they just read. (About differs — its heading is the
-      application name, not the window title.)
+      vertical space to tell the user something they just read.
     -->
-
-    <!-- Theme -->
-    <VBox spacing="4">
-        <Label fx:id="themeCaption" text="_Theme" mnemonicParsing="true"
-               styleClass="dialog-field-label"/>
-        <ChoiceBox fx:id="themeChoice" accessibleText="Colour theme" prefWidth="140"/>
-        <Label text="Applies to every open window straight away."
-               styleClass="dialog-hint" wrapText="true"/>
-    </VBox>
-
-    <!--
-      Playback Speed Factor. A Spinner rather than a Slider: the value is a multiplier over
-      0.1-10.0, and a linear track strands 1.0 - the default, and the value most returned to - at
-      9% of its travel, with every slow-motion setting crushed to the left of it. A spinner takes
-      an exact value and suits a setting configured once rather than scrubbed live.
-
-      The value factory's bounds and step are set in the controller, from the constants the store
-      range-checks against, so the control and the validator cannot drift apart.
-    -->
-    <VBox spacing="4">
-        <Label fx:id="playbackSpeedCaption" text="Playback Speed _Factor" mnemonicParsing="true"
-               styleClass="dialog-field-label"/>
-        <HBox spacing="10" alignment="CENTER_LEFT">
-            <Spinner fx:id="playbackSpeedSpinner" editable="true" prefWidth="110"
-                     accessibleText="Playback speed factor"/>
-            <Label text="× real time" styleClass="dialog-hint"/>
-        </HBox>
-        <Label text="1.0 is real time; 2.0 is twice as fast, 0.5 is half speed. Used by Log mode."
-               styleClass="dialog-hint" wrapText="true"/>
-    </VBox>
-
-    <!-- Log folder -->
-    <VBox spacing="4">
-        <Label text="Log folder" styleClass="dialog-field-label"/>
-        <HBox spacing="10" alignment="CENTER_LEFT">
-            <Button text="_Browse…" mnemonicParsing="true" onAction="#onChooseLogFolder"
-                    accessibleText="Choose log folder"/>
-            <Label fx:id="logFolderLabel" text="(none selected)" styleClass="dialog-readout"
-                   maxWidth="300" HBox.hgrow="ALWAYS"/>
-        </HBox>
-    </VBox>
+    <TabPane fx:id="tabs" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+        <Tab text="General">
+            <fx:include source="preferences/general-tab.fxml"/>
+        </Tab>
+        <Tab text="Log">
+            <fx:include source="preferences/log-tab.fxml"/>
+        </Tab>
+        <Tab text="Message">
+            <fx:include source="preferences/message-tab.fxml"/>
+        </Tab>
+        <Tab text="SOAP">
+            <fx:include source="preferences/soap-tab.fxml"/>
+        </Tab>
+    </TabPane>
 
     <Separator/>
 
-    <!--
-      Where the values actually live. The store is a plain properties file rather than the registry
-      so that this path is something a person can act on.
-    -->
-    <VBox spacing="2">
-        <Label text="Settings file" styleClass="dialog-field-label"/>
-        <Label fx:id="settingsFileLabel" styleClass="dialog-hint" maxWidth="408"/>
-    </VBox>
-
     <HBox spacing="8" alignment="CENTER_RIGHT">
-        <Button fx:id="resetButton" text="_Reset to defaults" mnemonicParsing="true"
-                onAction="#onResetToDefaults"/>
         <Region HBox.hgrow="ALWAYS"/>
         <Button text="Close" defaultButton="true" cancelButton="true" onAction="#onClose"/>
     </HBox>

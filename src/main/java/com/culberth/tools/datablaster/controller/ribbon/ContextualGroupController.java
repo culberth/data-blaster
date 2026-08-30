@@ -39,6 +39,14 @@ public class ContextualGroupController {
     private static final System.Logger LOG =
             System.getLogger(ContextualGroupController.class.getName());
 
+    /**
+     * Where {@link #initialize()} parks a reference to this controller on its own root node.
+     *
+     * <p>Public so {@code ContextualRibbonTest} can assert the reference is there. That check is
+     * deterministic, where a test that forced a collection and hoped would not be.
+     */
+    public static final String CONTROLLER_KEY = "datablaster.contextualGroupController";
+
     @FXML
     private HBox groupHost;
 
@@ -66,6 +74,23 @@ public class ContextualGroupController {
 
     @FXML
     private void initialize() {
+        // Pin this controller to the node tree it drives. Without this the slot silently stops
+        // swapping at some arbitrary later moment, and the failure looks like anything but a
+        // lifetime problem.
+        //
+        // Every other controller here is reachable from its own nodes by accident: an onAction
+        // handler, or a listener lambda registered on one of its controls, gives the scene graph a
+        // strong reference back. This one has neither -- it only observes AppState, and it observes
+        // weakly, as a prototype-scoped controller must. So after FXMLLoader returns, nothing
+        // refers to it at all, the weak listener clears at the next collection, and the ribbon stops
+        // following the mode.
+        //
+        // Tying its lifetime to the node it owns is exactly the intended semantics, not a
+        // workaround for the weak-listener rule: while this slot is on screen the listener must
+        // live, and when the slot is discarded both go together and the listener detaches. That is
+        // what the rule asks for.
+        groupHost.getProperties().put(CONTROLLER_KEY, this);
+
         appState.currentModeProperty().addListener(new WeakChangeListener<>(modeListener));
 
         // Reading AppState here is allowed and publishing is not: FXMLLoader builds depth-first, so

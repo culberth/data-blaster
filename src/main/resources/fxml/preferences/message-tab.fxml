@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ChoiceBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The Message tab: one setting, because Message mode has one setting.
+
+  The same chooser exists in the Message ribbon group. Neither holds a copy; both read and write
+  AppState, so changing it in either place is immediately true in the other.
+
+  The choices come from MessageType.values() in the controller, not from a list here, so adding a
+  constant stays a one-line change in the enum.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.preferences.MessageTabController"
+      spacing="14">
+    <padding>
+        <Insets top="14" right="14" bottom="14" left="14"/>
+    </padding>
+
+    <VBox spacing="4">
+        <Label fx:id="messageTypeCaption" text="Message _Type" mnemonicParsing="true"
+               styleClass="dialog-field-label"/>
+        <ChoiceBox fx:id="messageTypeChoice" accessibleText="Message type" prefWidth="180"/>
+        <Label text="Also available in the ribbon while Message mode is selected."
+               styleClass="dialog-hint" wrapText="true"/>
+    </VBox>
+
+    <Region VBox.vgrow="ALWAYS"/>
+
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Button fx:id="resetButton" text="_Reset this tab" mnemonicParsing="true"
+                onAction="#onResetToDefaults"
+                accessibleText="Reset the Message settings to their defaults"/>
+    </HBox>
+</VBox>

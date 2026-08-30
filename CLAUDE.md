@@ -13,12 +13,12 @@ Forked from JFXRibbon, a template written to be forked. The rename (PRD R27) is 
 directory `tool-boilerplate` and the GitHub remote are the last inherited names, and renaming those
 is a manual step outside the build.
 
-**The modes are real; their views and their editors are not yet.** `Mode` is a first-class enum,
+**Every mode is configurable; none of them does anything.** `Mode` is a first-class enum,
 `ViewRegistry` is keyed by it, the selected mode persists, every mode's settings persist under their
-own key namespace, and the ribbon follows the selected mode. What remains from the PRD: the tabbed
-Preferences rebuild (General / Log / Message / SOAP), the port-to-tail `TableView`, per-tab Reset,
-and the four mode views including an honest REST placeholder. Until the tabs land, SOAP's port and
-Log's mapping table persist correctly with nowhere to be edited.
+own key namespace, the ribbon follows the selected mode, and Preferences is a tab per scope with a
+working port-to-tail editor. **What remains from the PRD is the four content views** — still the
+template's abstract placeholders, and REST still needs one that says plainly it is not implemented.
+Mode *behaviour* is out of scope for v1 by design.
 
 **The loopback HTTP layer has been removed** (PRD Q10, answered no). There is no `web` package, no
 embedded Tomcat, and no `spring-boot-starter-webmvc` dependency. If you find references to
@@ -30,7 +30,7 @@ are. `ribbon.css` is loaded by name and parsed by name in `ThemeContrastTest`, s
 on `ribbon` breaks theming at runtime rather than at compile time.
 
 - [docs/architecture.md](docs/architecture.md) — how the **current** code works and why. Accurate as
-  of the contextual ribbon. Keep it that way: PRD requirement R21 says architecture.md is updated in
+  of the tabbed Preferences rebuild. Keep it that way: PRD requirement R21 says architecture.md is updated in
   the same change as the code it describes, not as a follow-up.
 - [docs/PRD.md](docs/PRD.md) — what is being **built next**: the four modes and their settings. v1
   makes the modes configurable and deliberately implements none of their behaviour. That boundary is
@@ -83,6 +83,8 @@ bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
   -> controller (MainController, Preferences/About, the four mode views)
        -> ui (StageRegistry, ViewRegistry, RibbonGroupRegistry, ViewSwitcher,
               DialogService, LogScale)
+     controller.ribbon      one controller per ribbon group
+     controller.preferences one controller per Preferences tab
             -> model (AppState, Mode, Settings — imports nothing from the app)
 ```
 
@@ -126,6 +128,29 @@ bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
   parses the stylesheet and asserts contrast ratios in both themes — don't hardcode hex colors outside
   the token blocks.
 
+**A controller that only observes must pin itself to its node tree.** `AppState` subscriptions are
+weak, and most controllers are kept alive by accident (an `onAction` handler, or a listener lambda on
+one of their own controls, is a strong node→controller reference). `ContextualGroupController` has
+neither, so it parks itself in `groupHost.getProperties()`; without that the weak listener clears at
+the next GC and the ribbon silently stops swapping. Same applies to any future observe-only
+controller.
+
+**Preferences is a `TabPane`** (General / Log / Message / SOAP; REST has no settings so it has no
+tab). Each tab is its own FXML under `fxml/preferences/` with its own prototype controller in
+`controller.preferences` — the shell owns only the Close button. **Reset is per tab**, and the Log
+tab confirms first *only when the mapping table is non-empty*, via `DialogService.confirm` — an
+inline `Alert` gets neither owner nor stylesheet and renders light under the dark theme.
+
+**The mapping editor** binds to `AppState.portTailMappings()` directly (the unmodifiable view, so
+column sorting is off — a sort would reorder it in place). Both columns are `String` columns
+*including Port*: an `Integer` column's converter throws from inside the cell commit, where the
+controller cannot turn it into a message. Every add and edit funnels through one method that catches
+`IllegalArgumentException` and shows its message verbatim beside the controls.
+
+**Tests must load Preferences tabs directly** (`/fxml/preferences/log-tab.fxml`), not look them up
+through `preferences.fxml`: a `TabPane` skin does not build a tab's content until it is shown, so a
+lookup on the unshown dialog finds only whichever tab happens to be selected.
+
 **Adding a ribbon group:** new FXML under `fxml/ribbon/` + new controller in
 `controller.ribbon` + one `<fx:include>` in `main.fxml`. No edits to `MainController` or other groups
 needed. A group's `initialize()` runs before the shell's (FXMLLoader builds depth-first) — a group may
@@ -154,9 +179,9 @@ subscribe, or every launch rewrites the file.
 
 ## Testing
 
-215 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
+238 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
 that need a real scene graph (`FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`,
-`ThemeSwitchingTest`, `ContextualRibbonTest`) initialize the JavaFX toolkit — everything else, especially `AppStateTest`, must
+`MappingTableTest`, `ContextualRibbonTest`, `ThemeSwitchingTest`) initialize the JavaFX toolkit — everything else, especially `AppStateTest`, must
 stay toolkit-free so CI's headless runner keeps working. See the test table in
 [docs/architecture.md §9](docs/architecture.md) for what each suite covers.
 

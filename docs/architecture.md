@@ -5,8 +5,8 @@ here exist to prevent specific defects that a peer review found in earlier versi
 
 | | |
 |---|---|
-| **Describes** | `rename-to-data-blaster`, after the contextual ribbon landed |
-| **Size** | ~3,100 lines of main Java, ~3,000 of test, 12 FXML files, one stylesheet |
+| **Describes** | `rename-to-data-blaster`, after the tabbed Preferences rebuild |
+| **Size** | ~3,700 lines of main Java, ~3,430 of test, 16 FXML files, one stylesheet |
 | **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (no web layer), Maven |
 | **Origin** | Forked from JFXRibbon, which was written as a template. See [PRD.md](PRD.md) |
 
@@ -68,6 +68,7 @@ depends on `model` and on nothing else — is the one to reinstate if SOAP mode 
 | `.ui` | Window ownership, the two registries, view swapping, dialogs, the log-track scale | `model` |
 | `.controller` | The shell and the content views | `ui`, `model` |
 | `.controller.ribbon` | One controller per ribbon group | `ui`, `model` |
+| `.controller.preferences` | One controller per Preferences tab | `ui`, `model` |
 
 ---
 
@@ -256,6 +257,24 @@ back empty. One class with two lookups behaving oppositely on a miss would read 
 **An empty slot un-manages itself.** Left visible-but-empty it would reserve width, leaving a hole
 with the ribbon's spacing on both sides of it — a layout bug no assertion about children would
 catch, which is why `ContextualRibbonTest` checks `isManaged()` directly.
+
+**The slot pins itself to its own node tree, and has to.** Every other controller in this project
+is reachable from its own nodes by accident: an `onAction` handler, or a listener lambda registered
+on one of its own controls, gives the scene graph a strong reference back to the controller. The
+contextual slot has neither — it only observes `AppState`, and it observes *weakly*, as a
+prototype-scoped controller must. So once `FXMLLoader` returned, nothing referred to it at all: the
+weak listener cleared at the next collection and the ribbon quietly stopped following the mode, at
+an arbitrary later moment, looking like anything but a lifetime problem.
+
+`initialize()` therefore parks the controller in its root node's property map. That is the intended
+semantics rather than a workaround for the weak-listener rule: while the slot is on screen the
+listener must live, and when the slot is discarded both go together and the listener detaches —
+which is exactly what the rule asks for. `ContextualRibbonTest` asserts the reference structurally,
+because `System.gc()` is a hint and a behavioural version of that test could pass while the bug was
+present.
+
+**A new controller that only observes needs the same treatment.** If it has no handler and registers
+nothing on its own controls, it is collectable, and the symptom is silence.
 
 **A group that fails to load is logged, not raised.** Unlike a content view, which gets a dialog, a
 ribbon group failing during shell construction would put an alert on screen before there is a window
@@ -493,30 +512,56 @@ counts. That follows from the rule as specified rather than being a decision abo
 if such tails turn up it is one character in the pattern plus a test. Flagged rather than allowed
 pre-emptively, because a character class that also accepts `------` has stopped validating anything.
 
-### Two surfaces, one value
+### Preferences: one tab per scope
 
-The log folder appears both in the ribbon's Log group and in Preferences. Neither holds a copy —
-both read from and write to `AppState`, and both read-outs are *bound* rather than assigned, so they
-track it without being rebuilt.
+`preferences.fxml` is a `TabPane` — General, Log, Message, SOAP — and owns nothing but the Close
+button. Each tab is its own FXML with its own prototype-scoped controller under
+`controller.preferences`, the same arrangement the ribbon groups use, so a tab gaining a control
+needs no edit to the shell.
 
-Playback Speed Factor is in both places too, but not as the same control: a log-scaled slider in the
-Log ribbon group for scrubbing, a `Spinner<Double>` in Preferences for typing an exact number. It
-left the *Appearance* group — it is a Log-mode setting, not an appearance one — and the Appearance
-group is now content opacity alone, which is not persisted at all. See §6 for why the ribbon control
-is logarithmic.
+**Tabs rather than only the current mode's settings.** Configuring Message mode while running in Log
+mode is the normal case, not the exception. Showing only the active mode's settings would make that
+impossible and would change the dialog's shape under the user for a reason that is not their fault.
 
-The log folder likewise moved out of the always-visible Tools group, which had nothing else in it
-and was deleted. Offering a Log-mode setting while SOAP mode is selected was the inconsistency the
-contextual ribbon exists to remove.
+**REST has no tab**, because it has no settings. A tab saying "nothing here" would be a promise that
+something is coming; the mode toggle already carries that message.
 
-Preferences applies edits immediately and closes with **Close**, not OK/Cancel. That is not a
-shortcut: a Cancel needs somewhere to hold uncommitted edits, and that buffer is a second copy of
-state `AppState` owns — the exact duplication consolidating the surfaces was meant to remove.
-**Reset to defaults** answers "I did not mean that" and is a much smaller thing to get right.
+**Reset is per tab, and only the Log tab asks first.** A reset that silently cleared a mapping table
+someone typed by hand is a different act from putting a spinner back — and a confirmation that
+always appeared would be one people learn to dismiss without reading, which is exactly what makes
+the one that matters ineffective. So the Log tab confirms only when the table is non-empty. The
+prompt goes through `DialogService.confirm`, not an inline `Alert`: an `Alert` built at the call
+site gets neither owner nor stylesheet, and opens in stock light chrome under the dark theme.
 
-The `DirectoryChooser` itself lives in `LogFolderChooser`, a singleton, so the two surfaces cannot
-drift on title or remembered directory — and the remembered directory now outlives the
-prototype-scoped ribbon controller that used to own it.
+**Two surfaces, one value.** The log folder, the playback speed and the message type each appear in
+both Preferences and the ribbon. None of them holds a copy — all read and write `AppState`, and the
+read-outs are *bound* rather than assigned, so they track it without being rebuilt.
+
+### The mapping editor
+
+A `TableView` over `AppState.portTailMappings()` — the unmodifiable view itself, not a copy, so the
+table tracks edits made anywhere without being rebuilt.
+
+**Sorting is off on both columns.** A sort would try to reorder that list in place, and it is
+unmodifiable by design; the entries already arrive in port order.
+
+**Both columns are `String` columns, including Port.** An `Integer` column needs a converter, and
+the default one throws on unparsable text from *inside* the cell's commit — an exception escaping
+into the table's own event handling, where the controller cannot turn it into a message. Parsing the
+text in the controller keeps every validation failure on one path.
+
+**Rejection happens at entry, with the reason shown.** Add and both edit-commit handlers funnel
+through one method that catches the `IllegalArgumentException` from `PortTailMapping` or
+`AppState.setPortTailMappings` and shows its message beside the controls. Those messages are written
+to be read by a person, which is why they are shown verbatim rather than rewritten in the UI. A
+rejected edit also calls `refresh()`, because the cell has already accepted the text visually and
+redrawing from the items list is what puts the old value back in front of the user.
+
+**The SOAP-port collision is a warning, not a block.** Nothing binds either port yet and the two
+settings are independent, so refusing the entry would be inventing a rule — but the conflict it
+predicts would surface much later, at bind time, in a different mode, with nothing pointing back
+here. The notice names the port in text; the `-jfx-warning-text` colour is a secondary signal only,
+since a reader who cannot distinguish it from a hint must still get the message.
 
 ### Theming
 
@@ -601,7 +646,7 @@ back as its default while the log folder on the next line restored perfectly.
 
 ## 9. Testing
 
-215 tests, no display required. Run on Linux and Windows for every push — see §10.
+238 tests, no display required. Run on Linux and Windows for every push — see §10.
 
 | Suite | Covers | Toolkit |
 |---|---|---|
@@ -614,11 +659,12 @@ back as its default while the log folder on the next line restored perfectly.
 | `ContextualRibbonTest` | That the ribbon follows the mode: the right group for the mode already selected when the slot is built, a swap on change, and an empty *unmanaged* slot for SOAP and REST | **yes** |
 | `SpringContextTest` | That the context starts, that every controller under `controller` is prototype-scoped, and that the shared services are not | no |
 | `ModeGroupViewIdTest` | That every `userData` in the ribbon names a real `Mode`, that every `Mode` has a toggle, that each resolves through `ViewRegistry`, and that the toggle marked selected is the default mode — read from the FXML as XML | no |
-| `FxmlSmokeTest` | That all twelve FXML files load through the real Spring-backed controller factory | **yes** |
+| `FxmlSmokeTest` | That all sixteen FXML files load through the real Spring-backed controller factory | **yes** |
 | `SettingsStoreTest` | The tolerance rules, against hand-written files: missing, corrupt, out of range, BOM-prefixed, non-ASCII, plus the mapping table entry by entry (bad port, bad tail, duplicate tail, a port spelled two ways) and that the template's keys are unknown keys | no |
 | `SettingsServiceTest` | Restore of every mode's settings, coalesced writes, the shutdown flush, that binding does not write back what it just read, and that a mapping edit persists at all | no |
 | `SettingsRestoreOrderTest` | That restoring *before* the controls are built is what puts stored values on them — including the negative case. Its subjects are the Preferences spinner and the Mode ribbon group, both of which read `AppState` once in `initialize()` | **yes** |
-| `PreferencesSurfaceTest` | That Preferences reads live state and writes through it rather than holding a copy, that the log-folder read-outs in both surfaces track it without a reopen, that the spinner's bounds come from the store's constants, that Reset touches only what the dialog shows, and that the Appearance group carries no persisted setting | **yes** |
+| `PreferencesSurfaceTest` | Tab by tab: that each reads live state and writes through it rather than holding a copy, that the log folder and message type track across both surfaces without a reopen, that the spinners' bounds come from the model's constants, that a tab's Reset touches only its own settings, and that the dialog has one tab per scope and none for REST | **yes** |
+| `MappingTableTest` | A4: that the editor adds, edits and removes mappings, and rejects a malformed port or tail, an out-of-range port and a duplicate in either direction **at entry with the reason visible** — the half of the rules that lives in the UI and that `PortTailMappingTest` cannot reach. Plus the non-blocking SOAP-port collision notice | **yes** |
 | `ThemeContrastTest` | Every on-screen colour pair in **both** themes, parsed from `ribbon.css`, against 4.5:1 for text and 3:1 for focus indicators | no |
 | `ThemeSwitchingTest` | That switching restyles windows that are **already open**, not only the next one created | **yes** |
 
@@ -630,8 +676,9 @@ They have come apart, and only one of them is a requirement:
 - **No display required (NFR7) — still true, and now proven.** `FxmlSmokeTest` runs on Monocle's
   software-only Glass platform via `HeadlessToolkit`. The Linux CI runner has no display, so this
   is checked by a machine rather than asserted here.
-- **No toolkit initialized — now narrowed** to the four suites that genuinely need a scene graph:
-  `FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest` and `ThemeSwitchingTest`.
+- **No toolkit initialized — now narrowed** to the six suites that genuinely need a scene graph:
+  `FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`, `MappingTableTest`,
+  `ContextualRibbonTest` and `ThemeSwitchingTest`.
   Every other suite must stay toolkit-free, and the model layer in particular has no excuse — the
   mode enums, the mapping rules and the whole settings store are testable without one, which is why
   `PortTailMappingTest` and `StoredEnumParsingTest` are in the "no" column despite covering rules a

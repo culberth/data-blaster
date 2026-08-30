@@ -17,7 +17,8 @@ without being asked when status changes, a decision is made, or work lands.
   2. The rename from JFXRibbon to Data Blaster
   3. The mode model and mode-scoped settings — 209 tests
   4. Removal of the loopback HTTP layer — 181 tests
-  5. The contextual ribbon (uncommitted at time of writing) — **215 tests, 0 failures**
+  5. The contextual ribbon — 215 tests
+  6. The tabbed Preferences rebuild (uncommitted at time of writing) — **238 tests, 0 failures**
 - Version reset to **1.0.0-SNAPSHOT**. JFXRibbon's `2.0.0-SNAPSHOT` numbered its Spring Boot 4
   migration and means nothing for a renamed artifact that has never shipped.
 - **The modes are real; their views and their editors are not.** `Mode` is a first-class enum,
@@ -30,10 +31,12 @@ without being asked when status changes, a decision is made, or work lands.
   swaps with `currentMode`. Log shows a log-scaled Playback Speed slider and the log folder; Message
   shows its type; SOAP and REST show nothing and the slot un-manages itself. The Tools group was
   deleted — the log folder was its only content and it belongs to Log mode.
-- **Still to do in v1:** the tabbed Preferences rebuild (General / Log / Message / SOAP), the
-  port-to-tail `TableView`, the four mode views including an honest REST placeholder, and per-tab
-  Reset. Until the tabs land, SOAP's port and Log's mapping table persist correctly but have nowhere
-  to be edited.
+- **Preferences is a TabPane** (General / Log / Message / SOAP; no REST tab, it has no settings).
+  Per-tab Reset; the Log tab confirms first, but only when the mapping table is non-empty. The
+  port-to-tail editor rejects bad entries at entry with the reason shown beside the controls.
+- **Still to do in v1:** the four content views, still the template's abstract placeholders, and an
+  honest "not implemented" view for REST. That is the last of the v1 scope; A1's Linux half is the
+  only other unticked acceptance item and it is CI's to confirm.
 
 ## What is being built
 See `docs/PRD.md` — Data Blaster v1. Four modes (Log, Message, SOAP, REST), each with its own
@@ -53,7 +56,10 @@ favour of a log-scaled ribbon slider.
 - Writes to `AppState` happen on the FX thread; off-thread writers use `onFxThread(Runnable)`. There
   is deliberately no off-thread read path any more. Property accessors are read-only and the mapping
   collection is handed out unmodifiable — there must be no second, unguarded way in.
-- FXML controllers are prototype-scoped; their subscriptions to `AppState` are weak.
+- FXML controllers are prototype-scoped; their subscriptions to `AppState` are weak. **A controller
+  that only observes — no `onAction`, no listener on its own controls — has nothing referring to it
+  and must pin itself to its node tree** (see `ContextualGroupController`), or the weak listener
+  clears at the next GC and the feature silently stops.
 - Headless tests only; `HeadlessToolkit` is for scene-graph tests exclusively.
 - `EXPECTED_FXML_COUNT` / `EXPECTED_CONTROLLER_COUNT` must track new FXML files and controllers.
 - No HTTP layer, no bound port. If SOAP mode adds a server, it starts from that mode's configured
@@ -102,3 +108,20 @@ favour of a log-scaled ribbon slider.
   Two things to preserve: the *rounded* value is what gets stored, so that rounding must stay in
   `LogScale` and not move into the display format; and the slider follows `AppState` rather than
   reading it once, which is why `LogGroupController` needs its re-entrancy guard.
+- 2026-08-29 — **Built the tabbed Preferences rebuild** (PRD R15, R17–R19): four tab FXMLs under
+  `fxml/preferences/` with controllers in `controller.preferences`, the port-to-tail `TableView`
+  with add/edit/remove and at-entry rejection, per-tab Reset, and the non-blocking SOAP-port
+  collision notice. A3, A4 and A7 now pass. 215 → 238 tests.
+- 2026-08-29 — **Two things found while building it.** The confirmation `Alert` was inline and got
+  neither owner nor stylesheet, so it would have rendered light under the dark theme; it moved to
+  `DialogService.confirm`, where `showModal`/`showError` already handle that. And tests must load
+  Preferences tabs **directly** — a `TabPane` skin does not build a tab's content until it is shown,
+  so a lookup through `preferences.fxml` silently finds only the selected tab. `PreferencesSurfaceTest`
+  failed exactly that way before being rewritten.
+- 2026-08-29 — **Found a real defect via an order-dependent test failure.**
+  `ContextualGroupController` observes `AppState` weakly and had no `onAction` and no listener on its
+  own controls, so nothing referenced it: the weak listener cleared at the next collection and the
+  contextual ribbon stopped swapping. It only showed up under the allocation pressure of a full
+  `mvn verify`, not `mvn test`. Fixed by pinning the controller to its root node's property map, with
+  a structural assertion rather than a `System.gc()` guess. Worth remembering as a class of bug, not
+  a one-off.

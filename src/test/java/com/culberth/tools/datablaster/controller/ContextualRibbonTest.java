@@ -3,12 +3,14 @@ package com.culberth.tools.datablaster.controller;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.culberth.tools.datablaster.HeadlessToolkit;
 import com.culberth.tools.datablaster.ViewLoader;
 import com.culberth.tools.datablaster.model.AppState;
 import com.culberth.tools.datablaster.model.Mode;
+import com.culberth.tools.datablaster.controller.ribbon.ContextualGroupController;
 import com.culberth.tools.datablaster.model.Settings;
 import javafx.scene.Parent;
 import javafx.scene.layout.Pane;
@@ -119,6 +121,34 @@ class ContextualRibbonTest {
             appState.setCurrentMode(Mode.REST);
             assertTrue(slot.getChildren().isEmpty(), "REST has no contextual group either");
             assertFalse(slot.isManaged());
+        });
+    }
+
+    /**
+     * The slot must survive a garbage collection.
+     *
+     * <p>This is a regression test for a real defect, not a hypothetical. Every other controller in
+     * this project is reachable from its own nodes by accident — an {@code onAction} handler, or a
+     * listener lambda on one of its own controls, gives the scene graph a strong reference back.
+     * The contextual slot has neither: it only observes {@code AppState}, and it observes weakly,
+     * as a prototype-scoped controller must. So once {@code FXMLLoader} returned, nothing referred
+     * to it, the weak listener cleared at the next collection, and the ribbon stopped following the
+     * mode — at an arbitrary later moment, looking like anything but a lifetime problem. It
+     * surfaced here as one suite failing only under the allocation pressure of a full {@code verify}.
+     *
+     * <p>Asserted structurally rather than by forcing a collection and hoping: {@code System.gc()}
+     * is a hint, so a behavioural version of this test could pass while the bug was present.
+     */
+    @Test
+    @DisplayName("the node tree holds its controller, so a collection cannot detach the listener")
+    void theNodeTreeHoldsItsController() {
+        HeadlessToolkit.onFxThread(() -> {
+            ViewLoader.LoadedView loaded = viewLoader.load(CONTEXTUAL_GROUP);
+
+            assertSame(loaded.controller(),
+                    loaded.root().getProperties().get(ContextualGroupController.CONTROLLER_KEY),
+                    "nothing else refers to this controller; without this the weak mode listener "
+                            + "clears at the next GC and the ribbon quietly stops swapping");
         });
     }
 

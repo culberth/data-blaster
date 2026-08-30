@@ -44,7 +44,7 @@ class SpringContextTest {
      * The controllers that exist today. Asserted as an exact count so that adding a controller
      * without a scope annotation fails here rather than passing a check that scanned nothing.
      */
-    private static final int EXPECTED_CONTROLLER_COUNT = 12;
+    private static final int EXPECTED_CONTROLLER_COUNT = 16;
 
     private final ConfigurableApplicationContext context;
 

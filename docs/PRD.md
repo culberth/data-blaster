@@ -351,11 +351,11 @@ violate:
 
 - [ ] **A1** — `mvn verify` passes on Linux and Windows, no display required *(passing on Windows; Linux is CI's to confirm)*
 - [x] **A2** — The four toggles read Log, Message, SOAP, REST; selecting one switches the view; the choice survives a restart
-- [ ] **A3** — Preferences opens with General, Log, Message and SOAP tabs; each mode's settings are editable regardless of which mode is selected
-- [ ] **A4** — A port-to-tail mapping can be added, edited and removed; invalid ports, malformed tails, and duplicates in either direction are rejected at entry with the reason visible
+- [x] **A3** — Preferences opens with General, Log, Message and SOAP tabs; each mode's settings are editable regardless of which mode is selected
+- [x] **A4** — A port-to-tail mapping can be added, edited and removed; invalid ports, malformed tails, and duplicates in either direction are rejected at entry with the reason visible
 - [x] **A5** — Every setting in the §4.2 table survives a restart
 - [x] **A6** — A hand-broken settings file — one bad mapping, one bad scalar, a duplicate tail, a BOM — loads everything else and logs what it dropped
-- [ ] **A7** — Reset to defaults on each tab restores that tab's values and nothing else; the Log tab confirms before clearing mappings
+- [x] **A7** — Reset to defaults on each tab restores that tab's values and nothing else; the Log tab confirms before clearing mappings
 - [x] **A8** — `docs/architecture.md` describes the code as it now stands
 - [x] **A9** — Nothing outside `docs/` mentions JFXRibbon: not the package, window title, About dialog, settings directory or jpackage output. (The status payload dropped off this list with the HTTP layer — Q10.) Remaining mentions in `README.md`, `CLAUDE.md`, `memory.md` and a `pom.xml` comment are deliberate statements of provenance. The `ribbon` UI vocabulary (R28) is untouched and the app still themes correctly, which is what proves `ribbon.css` survived the rename
 

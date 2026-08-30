@@ -56,6 +56,8 @@ class ThemeContrastTest {
             new Pair("-jfx-text", "-jfx-accent-surface", 4.5, "the selected ribbon button label"),
             new Pair("-jfx-text-secondary", "-jfx-surface-raised", 4.5, "group titles and hints"),
             new Pair("-jfx-text-readout", "-jfx-surface-raised", 4.5, "the value read-outs"),
+            new Pair("-jfx-warning-text", "-jfx-surface-raised", 4.5,
+                    "the port-collision warning in Preferences"),
             // Non-text: SC 1.4.11 for the graphics, SC 2.4.11 for the focus indicator.
             new Pair("-jfx-icon", "-jfx-surface-raised", 3.0, "icon strokes"),
             new Pair("-jfx-accent", "-jfx-surface-raised", 3.0, "the focus border"),

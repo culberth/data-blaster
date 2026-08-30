@@ -17,6 +17,8 @@
     -jfx-accent: #0078d4;
     -jfx-accent-dark: #004578;
     -jfx-accent-surface: #c7e0f4;
+    /* Warnings that inform rather than block — see .dialog-warning. */
+    -jfx-warning-text: #9a5b00;
 }
 
 /*
@@ -45,6 +47,7 @@
     -jfx-accent: #4da3f0;
     -jfx-accent-dark: #a8d4f8;
     -jfx-accent-surface: #123a5c;
+    -jfx-warning-text: #e8b339;
 }
 
 /*
@@ -247,4 +250,21 @@
 .dialog-hint {
     -fx-font-size: 11px;
     -fx-text-fill: -jfx-text-secondary;
+}
+
+/*
+ * A warning that does not block. Colour is the secondary signal only: the text says what the
+ * problem is, because a reader who cannot distinguish this from a hint must still get the message.
+ */
+.dialog-warning {
+    -fx-font-size: 11px;
+    -fx-text-fill: -jfx-warning-text;
+}
+
+/*
+ * The mapping table. Sizing rather than colour: the table inherits the themed control chrome, and
+ * the row height keeps a six-character tail from being clipped at the default font size.
+ */
+.mapping-table {
+    -fx-font-size: 11px;
 }

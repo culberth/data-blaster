@@ -1,8 +1,9 @@
 package com.culberth.tools.datablaster.ui;
 
 import com.culberth.tools.datablaster.ViewLoader;
-import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
@@ -48,6 +49,40 @@ public class DialogService {
             dialog.showAndWait();
         } catch (Exception e) {
             showError("Unable to open " + title, e);
+        }
+    }
+
+    /**
+     * Asks the user to confirm a destructive action, returning whether they agreed.
+     *
+     * <p>Here rather than at the call site for the same reason {@link #showModal} is: owner and
+     * stylesheet are applied in one place. An {@code Alert} built inline gets neither, so it opens
+     * unowned and in stock light chrome — which is most obvious, and most wrong, under the dark
+     * theme.
+     *
+     * <p>{@code confirmLabel} names the action rather than saying "OK". A button that says what it
+     * does is the difference between reading a dialog and dismissing it.
+     *
+     * <p>Returns {@code false} if the dialog cannot be shown at all. A confirmation that fails open
+     * would let the very action it guards proceed unattended.
+     */
+    public boolean confirm(String header, String message, String confirmLabel) {
+        try {
+            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+            Stage owner = stageRegistry.getPrimaryStage();
+            if (owner != null) {
+                alert.initOwner(owner);
+            }
+            viewLoader.style(alert.getDialogPane());
+            alert.setTitle("Data Blaster");
+            alert.setHeaderText(header);
+            alert.setContentText(message);
+            ButtonType confirmButton = new ButtonType(confirmLabel, ButtonBar.ButtonData.OK_DONE);
+            alert.getButtonTypes().setAll(confirmButton, ButtonType.CANCEL);
+            return alert.showAndWait().filter(confirmButton::equals).isPresent();
+        } catch (RuntimeException cannotAsk) {
+            LOG.log(System.Logger.Level.ERROR, "Could not display the confirmation dialog", cannotAsk);
+            return false;
         }
     }
 

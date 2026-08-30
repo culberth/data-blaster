@@ -35,7 +35,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * and never re-read them. So the ordering is not a matter of taste: get it wrong and the controls
  * show defaults while the state says something else, with nothing failing and nothing logged.
  *
- * <p><strong>The subjects are the Preferences spinner and the Mode ribbon group.</strong> The
+ * <p><strong>The subjects are the Preferences Log tab's spinner and the Mode ribbon group.</strong> The
  * template used the Appearance group's Sim Factor slider, which no longer exists — Playback Speed
  * Factor moved to Preferences, and Appearance is left with opacity, which is not persisted and so
  * cannot show this at all. The Mode group is the replacement on the ribbon side: it reads the
@@ -51,7 +51,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest
 class SettingsRestoreOrderTest {
 
-    private static final String PREFERENCES = "/fxml/preferences.fxml";
+    private static final String LOG_TAB = "/fxml/preferences/log-tab.fxml";
     private static final String MODE_GROUP = "/fxml/ribbon/mode-group.fxml";
     private static final String LOG_GROUP = "/fxml/ribbon/log-group.fxml";
 
@@ -115,10 +115,10 @@ class SettingsRestoreOrderTest {
         return service;
     }
 
-    private static double playbackSpeedOf(Parent preferences) {
+    private static double playbackSpeedOf(Parent logTab) {
         @SuppressWarnings("unchecked")
-        Spinner<Double> spinner = (Spinner<Double>) preferences.lookup("#playbackSpeedSpinner");
-        assertNotNull(spinner, "the Playback Speed spinner should be in the dialog's node tree");
+        Spinner<Double> spinner = (Spinner<Double>) logTab.lookup("#playbackSpeedSpinner");
+        assertNotNull(spinner, "the Playback Speed spinner should be in the tab's node tree");
         return spinner.getValue();
     }
 
@@ -143,7 +143,7 @@ class SettingsRestoreOrderTest {
         HeadlessToolkit.onFxThread(() -> {
             service.bind(appState);
 
-            assertEquals(STORED_PLAYBACK_SPEED, playbackSpeedOf(viewLoader.loadParent(PREFERENCES)),
+            assertEquals(STORED_PLAYBACK_SPEED, playbackSpeedOf(viewLoader.loadParent(LOG_TAB)),
                     0.0001, "the spinner should show the stored value, not the FXML default");
 
             assertSame(STORED_MODE, selectedModeOf(viewLoader.loadParent(MODE_GROUP)),
@@ -169,7 +169,7 @@ class SettingsRestoreOrderTest {
                 "log.playbackSpeedFactor=" + STORED_PLAYBACK_SPEED + "\n");
 
         HeadlessToolkit.onFxThread(() -> {
-            Parent preferences = viewLoader.loadParent(PREFERENCES);
+            Parent preferences = viewLoader.loadParent(LOG_TAB);
             service.bind(appState);
 
             assertEquals(STORED_PLAYBACK_SPEED, appState.getPlaybackSpeedFactor(), 0.0001,
@@ -191,7 +191,7 @@ class SettingsRestoreOrderTest {
             service.bind(appState);
 
             assertEquals(Settings.PLAYBACK_SPEED_DEFAULT,
-                    playbackSpeedOf(viewLoader.loadParent(PREFERENCES)), 0.0001);
+                    playbackSpeedOf(viewLoader.loadParent(LOG_TAB)), 0.0001);
             assertSame(Settings.DEFAULTS.mode(), selectedModeOf(viewLoader.loadParent(MODE_GROUP)));
 
             Label logFolder = (Label) viewLoader.loadParent(LOG_GROUP).lookup("#logFolderLabel");
