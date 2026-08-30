@@ -15,10 +15,11 @@ import org.springframework.stereotype.Component;
  * otherwise green. Half of that risk is now a compiler error; what remains is the {@code userData}
  * side, which {@code ModeGroupViewIdTest} checks parses to a real constant.
  *
- * <p><strong>The views themselves are still the inherited placeholders.</strong> {@code view1.fxml}
- * through {@code view4.fxml} say nothing about Log, Message, SOAP or REST. Renaming them, and
- * giving REST a view that admits plainly that it is not implemented, is the next change; keying
- * them by mode first is what lets that one be a rename rather than a rewiring.
+ * <p><strong>Each view now names its mode.</strong> The template's {@code view1.fxml} through
+ * {@code view4.fxml} said nothing about Log, Message, SOAP or REST; keying this registry by the
+ * enum first is what let replacing them be a rename rather than a rewiring. The views are still
+ * placeholders in the sense that no mode has behaviour — but they say so, and the three modes with
+ * settings show them live.
  */
 @Component
 public class ViewRegistry {
@@ -26,10 +27,10 @@ public class ViewRegistry {
     private final Map<Mode, String> viewsByMode = new EnumMap<>(Mode.class);
 
     public ViewRegistry() {
-        register(Mode.LOG, "/fxml/view1.fxml");
-        register(Mode.MESSAGE, "/fxml/view2.fxml");
-        register(Mode.SOAP, "/fxml/view3.fxml");
-        register(Mode.REST, "/fxml/view4.fxml");
+        register(Mode.LOG, "/fxml/log-view.fxml");
+        register(Mode.MESSAGE, "/fxml/message-view.fxml");
+        register(Mode.SOAP, "/fxml/soap-view.fxml");
+        register(Mode.REST, "/fxml/rest-view.fxml");
     }
 
     public final void register(Mode mode, String fxmlClasspathResource) {

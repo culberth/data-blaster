@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The REST mode view.
+
+  REST is different from the other three: they are configured but unimplemented, whereas REST
+  is not designed yet and has no settings at all. So there are no read-outs here, and the note
+  says so rather than implying something is merely switched off.
+
+  The toggle ships visible on purpose. A disabled button with no explanation is worse than an
+  honest placeholder — it leaves the user guessing whether the app is broken.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.RestViewController"
+      spacing="14" VBox.vgrow="ALWAYS">
+    <padding>
+        <Insets top="28" right="28" bottom="28" left="28"/>
+    </padding>
+
+    <Label text="REST" styleClass="mode-view-title"/>
+    <Label fx:id="notImplementedNote" text="Not implemented. REST mode has no settings and no behaviour yet, and unlike the other three it has not been designed — so there is nothing to configure for it in Preferences either." styleClass="mode-view-note" wrapText="true"/>
+</VBox>

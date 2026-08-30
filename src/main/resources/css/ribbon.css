@@ -268,3 +268,28 @@
 .mapping-table {
     -fx-font-size: 11px;
 }
+
+/*
+ * The mode views. These replace an inline style="-fx-font-size: 22px;" that each placeholder view
+ * carried: a literal the theme tokens could never reach, so the heading kept its light-theme text
+ * colour when everything around it went dark. Same reasoning as the dialog typography above.
+ */
+.mode-view-title {
+    -fx-font-size: 22px;
+    -fx-text-fill: -jfx-text;
+}
+
+.mode-view-note {
+    -fx-font-size: 12px;
+    -fx-text-fill: -jfx-text-secondary;
+}
+
+.mode-view-caption {
+    -fx-font-size: 12px;
+    -fx-text-fill: -jfx-text-secondary;
+}
+
+.mode-view-value {
+    -fx-font-size: 12px;
+    -fx-text-fill: -jfx-text-readout;
+}

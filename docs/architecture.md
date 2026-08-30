@@ -5,8 +5,8 @@ here exist to prevent specific defects that a peer review found in earlier versi
 
 | | |
 |---|---|
-| **Describes** | `rename-to-data-blaster`, after the tabbed Preferences rebuild |
-| **Size** | ~3,700 lines of main Java, ~3,430 of test, 16 FXML files, one stylesheet |
+| **Describes** | `rename-to-data-blaster`, after the mode views — v1's feature scope complete |
+| **Size** | ~3,840 lines of main Java, ~3,650 of test, 16 FXML files, one stylesheet |
 | **Stack** | Java 21, JavaFX 21.0.2, Spring Boot 4.1.1 (no web layer), Maven |
 | **Origin** | Forked from JFXRibbon, which was written as a template. See [PRD.md](PRD.md) |
 
@@ -21,16 +21,15 @@ UI components are Spring beans and can be given dependencies by constructor inje
 The template also carried a small loopback-only HTTP layer. It has been removed — see §8 for what
 that bought and what is worth carrying forward when SOAP mode brings a server of its own.
 
-**The modes are real; their views and their editors are not yet.** `Mode` is a first-class enum,
-`ViewRegistry` is keyed by it, the selected mode persists, and each mode has its own block of
-persisted settings with its own namespace in the file. What has not been built is the rest of
-[PRD.md](PRD.md): the four content views are still the template's abstract placeholders behind
-correctly-labelled toggles, and Preferences is still one flat pane, so Message's type, SOAP's port
-and Log's port-to-tail table are settings that persist correctly with nowhere yet to edit them. The
-tabbed Preferences rebuild and the mode views are the next change.
+**Every mode is configurable, and v1's feature scope is complete.** `Mode` is a first-class enum,
+`ViewRegistry` is keyed by it, the selected mode persists, each mode has its own block of persisted
+settings under its own key namespace, the ribbon follows the selected mode, Preferences is a tab per
+scope with a working port-to-tail editor, and each mode has a view that names it and shows its live
+configuration.
 
 **None of the modes do anything.** That is deliberate and is the PRD's stated v1 boundary: v1 makes
-the modes configurable and implements no mode behaviour.
+the modes configurable and implements no mode behaviour. The views say so rather than being blank,
+and REST — which is not designed at all, not merely unimplemented — says that instead.
 
 The shell existed to be forked, and this is the fork. That history shapes several decisions recorded
 below: where duplication is tolerated, and where it is not.
@@ -66,7 +65,7 @@ depends on `model` and on nothing else — is the one to reinstate if SOAP mode 
 | `com.culberth.tools.datablaster` | Entry points, Spring config, FXML loading | `ui`, `controller` |
 | `.model` | `AppState`; `Mode`, `MessageType`, `Theme`, `PortTailMapping`; the settings record, store and service | nothing in the app |
 | `.ui` | Window ownership, the two registries, view swapping, dialogs, the log-track scale | `model` |
-| `.controller` | The shell and the content views | `ui`, `model` |
+| `.controller` | The shell, the dialogs, and one view per mode | `ui`, `model` |
 | `.controller.ribbon` | One controller per ribbon group | `ui`, `model` |
 | `.controller.preferences` | One controller per Preferences tab | `ui`, `model` |
 
@@ -537,6 +536,33 @@ site gets neither owner nor stylesheet, and opens in stock light chrome under th
 both Preferences and the ribbon. None of them holds a copy — all read and write `AppState`, and the
 read-outs are *bound* rather than assigned, so they track it without being rebuilt.
 
+### The mode views
+
+Each mode's content view names it and shows that mode's live configuration read-only: Log its
+folder, speed and mapping count; Message its type; SOAP its port. REST shows none, because it has
+none.
+
+**Read-only on purpose.** Every value is already editable in the ribbon or in Preferences. A third
+editing surface would be a third thing to keep in step; a read-out is not — and being *bound* rather
+than assigned makes these views the cheapest end-to-end demonstration that the settings plumbing
+works, since the ribbon, the dialog and the view are three independent readers of one `AppState`.
+
+**They are placeholders that say so.** No mode has behaviour, and each view states that rather than
+leaving the reader to infer it from an empty pane. REST is different again and says something
+different: it is not *designed*, not merely unimplemented, so it has no settings anywhere and its
+note says that instead of implying something is switched off. That is also why its ribbon toggle
+ships enabled — a dead button with no explanation leaves the user guessing whether the app is broken.
+
+**The rename mattered more than it looks.** These were `view1.fxml` through `view4.fxml`, and
+`ViewRegistry` mapped `LOG` to `view1`. Keying the registry by the enum first is what let this be a
+rename rather than a rewiring; `ModeViewTest` now asserts each mode's view actually carries that
+mode's title, which is a mis-wiring no compiler catches.
+
+**They also carried a theming defect.** Each had `style="-fx-font-size: 22px;"` inline — a literal
+the theme tokens could never reach, so the heading kept its light-theme text colour when everything
+around it went dark. They use `.mode-view-*` classes now, and `ModeViewTest` fails if an inline
+style comes back.
+
 ### The mapping editor
 
 A `TableView` over `AppState.portTailMappings()` — the unmodifiable view itself, not a copy, so the
@@ -646,7 +672,7 @@ back as its default while the log folder on the next line restored perfectly.
 
 ## 9. Testing
 
-238 tests, no display required. Run on Linux and Windows for every push — see §10.
+245 tests, no display required. Run on Linux and Windows for every push — see §10.
 
 | Suite | Covers | Toolkit |
 |---|---|---|
@@ -656,6 +682,7 @@ back as its default while the log folder on the next line restored perfectly.
 | `ViewRegistryTest` | That every `Mode` resolves to a view, that no two share one, and the miss message | no |
 | `RibbonGroupRegistryTest` | That only Log and Message carry a contextual group, that a mode without one gets an empty `Optional` rather than a throw, and that every registered group is actually on the classpath | no |
 | `LogScaleTest` | The log-track arithmetic: real time at mid-track, halving and doubling covering equal travel, round-trips, and that no rounded value falls outside what the store accepts | no |
+| `ModeViewTest` | That every mode resolves to a view naming it, that the Log, Message and SOAP views show that mode's configuration **live**, that REST says plainly it is not implemented, and that no view styles itself with an inline literal the theme cannot reach | **yes** |
 | `ContextualRibbonTest` | That the ribbon follows the mode: the right group for the mode already selected when the slot is built, a swap on change, and an empty *unmanaged* slot for SOAP and REST | **yes** |
 | `SpringContextTest` | That the context starts, that every controller under `controller` is prototype-scoped, and that the shared services are not | no |
 | `ModeGroupViewIdTest` | That every `userData` in the ribbon names a real `Mode`, that every `Mode` has a toggle, that each resolves through `ViewRegistry`, and that the toggle marked selected is the default mode — read from the FXML as XML | no |
@@ -676,9 +703,9 @@ They have come apart, and only one of them is a requirement:
 - **No display required (NFR7) — still true, and now proven.** `FxmlSmokeTest` runs on Monocle's
   software-only Glass platform via `HeadlessToolkit`. The Linux CI runner has no display, so this
   is checked by a machine rather than asserted here.
-- **No toolkit initialized — now narrowed** to the six suites that genuinely need a scene graph:
+- **No toolkit initialized — now narrowed** to the seven suites that genuinely need a scene graph:
   `FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`, `MappingTableTest`,
-  `ContextualRibbonTest` and `ThemeSwitchingTest`.
+  `ContextualRibbonTest`, `ModeViewTest` and `ThemeSwitchingTest`.
   Every other suite must stay toolkit-free, and the model layer in particular has no excuse — the
   mode enums, the mapping rules and the whole settings store are testable without one, which is why
   `PortTailMappingTest` and `StoredEnumParsingTest` are in the "no" column despite covering rules a

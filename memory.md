@@ -6,19 +6,24 @@ without being asked when status changes, a decision is made, or work lands.
 ## Snapshot
 - **Product:** Data Blaster — a mode-based JavaFX/Spring Boot desktop tool
 - **Coordinates:** `com.culberth.tools:data-blaster`, package `com.culberth.tools.datablaster`
-- **Local path:** `P:\ClaudeCowork\Projects\tool-boilerplate` (directory name still inherited)
+- **Local path:** `P:\ClaudeCowork\Projects\data-blaster`
+- **Remote:** `github.com/culberth/data-blaster`
 - **Stack:** Java 21 (built on JDK 26), JavaFX 21.0.2, Spring Boot 4.1.1 (no web layer), Maven
 - **Forked from:** JFXRibbon / `culberth/javafx-ribbon-view-switcher` (GPL-3.0), a template written
   to be forked. This is that fork.
 
 ## Current state (as of 2026-08-29)
-- Branch `rename-to-data-blaster`, five commits' worth of work ahead of `main`:
+- Branch `rename-to-data-blaster`, seven commits' worth of work ahead of `main` — which is still at
+  `first commit`, so effectively the whole project lives on this branch. Merging it, and whether the
+  branch name still fits what it now contains, are open.
+
   1. Baseline import of the inherited codebase (110 tests, 0 failures)
   2. The rename from JFXRibbon to Data Blaster
   3. The mode model and mode-scoped settings — 209 tests
   4. Removal of the loopback HTTP layer — 181 tests
   5. The contextual ribbon — 215 tests
-  6. The tabbed Preferences rebuild (uncommitted at time of writing) — **238 tests, 0 failures**
+  6. The tabbed Preferences rebuild — 238 tests
+  7. The mode views (uncommitted at time of writing) — **245 tests, 0 failures**
 - Version reset to **1.0.0-SNAPSHOT**. JFXRibbon's `2.0.0-SNAPSHOT` numbered its Spring Boot 4
   migration and means nothing for a renamed artifact that has never shipped.
 - **The modes are real; their views and their editors are not.** `Mode` is a first-class enum,
@@ -34,9 +39,12 @@ without being asked when status changes, a decision is made, or work lands.
 - **Preferences is a TabPane** (General / Log / Message / SOAP; no REST tab, it has no settings).
   Per-tab Reset; the Log tab confirms first, but only when the mapping table is non-empty. The
   port-to-tail editor rejects bad entries at entry with the reason shown beside the controls.
-- **Still to do in v1:** the four content views, still the template's abstract placeholders, and an
-  honest "not implemented" view for REST. That is the last of the v1 scope; A1's Linux half is the
-  only other unticked acceptance item and it is CI's to confirm.
+- **Each mode has a view** that names it and shows its live configuration read-only; REST says
+  plainly it is not implemented. The views were `view1`–`view4` and also carried an inline
+  `-fx-font-size` literal the theme could not reach; both are fixed.
+- **v1's feature scope is complete.** Every acceptance criterion passes except A1's Linux half,
+  which is CI's to confirm. The remaining known task is the jpackage `--add-modules` trim, which
+  needs a real packaged run.
 
 ## What is being built
 See `docs/PRD.md` — Data Blaster v1. Four modes (Log, Message, SOAP, REST), each with its own
@@ -125,3 +133,14 @@ favour of a log-scaled ribbon slider.
   `mvn verify`, not `mvn test`. Fixed by pinning the controller to its root node's property map, with
   a structural assertion rather than a `System.gc()` guess. Worth remembering as a class of bug, not
   a one-off.
+- 2026-08-29 — **Built the four mode views (PRD R14), completing v1's feature scope.**
+  `view1`–`view4` became `log-view`/`message-view`/`soap-view`/`rest-view` with matching controllers,
+  and `ViewRegistry` no longer maps `LOG` to `view1`. Each shows that mode's live configuration
+  read-only — bound, not assigned, so the ribbon, Preferences and the view are three independent
+  readers of one `AppState`. REST shows a note instead, because it is not *designed*, not merely
+  unimplemented. Also removed the inline `style="-fx-font-size: 22px;"` each view carried: a literal
+  the theme tokens could never reach, so headings kept light-theme colour under the dark theme.
+  238 → 245 tests.
+- 2026-08-29 — R27 is **fully** done, manual steps included: the directory is
+  `Projects/data-blaster` and the remote is `culberth/data-blaster`. Three files still claimed
+  otherwise and have been corrected.

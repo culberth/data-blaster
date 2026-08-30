@@ -1,7 +1,7 @@
 # PRD — Data Blaster v1
 
 **Product:** Data Blaster
-**Repository:** `Projects/tool-boilerplate/` — an inherited directory name; see R27
+**Repository:** `Projects/data-blaster/`, remote `culberth/data-blaster` — both renamed; see R27
 **Type:** JavaFX + Spring Boot desktop tool, forked from JFXRibbon
 **Created:** 2026-08-29
 **Status:** v1 scope — supersedes the archetype PRD, which described a different project

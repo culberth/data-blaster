@@ -9,16 +9,16 @@ JavaFX + Spring Boot desktop tool: an Office-style ribbon, switchable content vi
 persisted settings and light/dark theming. Spring is here for dependency injection and the bean
 lifecycle only — the app serves nothing and binds no port.
 
-Forked from JFXRibbon, a template written to be forked. The rename (PRD R27) is **done**; the
-directory `tool-boilerplate` and the GitHub remote are the last inherited names, and renaming those
-is a manual step outside the build.
+Forked from JFXRibbon, a template written to be forked. The rename (PRD R27) is **done in full** —
+including the two manual steps outside the build: the directory is `Projects/data-blaster` and the
+remote is `culberth/data-blaster`. Nothing inherits the old name any more.
 
 **Every mode is configurable; none of them does anything.** `Mode` is a first-class enum,
 `ViewRegistry` is keyed by it, the selected mode persists, every mode's settings persist under their
-own key namespace, the ribbon follows the selected mode, and Preferences is a tab per scope with a
-working port-to-tail editor. **What remains from the PRD is the four content views** — still the
-template's abstract placeholders, and REST still needs one that says plainly it is not implemented.
-Mode *behaviour* is out of scope for v1 by design.
+own key namespace, the ribbon follows the selected mode, Preferences is a tab per scope with a
+working port-to-tail editor, and each mode has a view that names it and shows its live configuration
+(REST says plainly it is not implemented). **v1's feature scope is complete.** Mode *behaviour* is
+out of scope for v1 by design — that boundary is the thing to push back with when scope creeps.
 
 **The loopback HTTP layer has been removed** (PRD Q10, answered no). There is no `web` package, no
 embedded Tomcat, and no `spring-boot-starter-webmvc` dependency. If you find references to
@@ -30,7 +30,7 @@ are. `ribbon.css` is loaded by name and parsed by name in `ThemeContrastTest`, s
 on `ribbon` breaks theming at runtime rather than at compile time.
 
 - [docs/architecture.md](docs/architecture.md) — how the **current** code works and why. Accurate as
-  of the tabbed Preferences rebuild. Keep it that way: PRD requirement R21 says architecture.md is updated in
+  of the mode views. Keep it that way: PRD requirement R21 says architecture.md is updated in
   the same change as the code it describes, not as a follow-up.
 - [docs/PRD.md](docs/PRD.md) — what is being **built next**: the four modes and their settings. v1
   makes the modes configurable and deliberately implements none of their behaviour. That boundary is
@@ -179,9 +179,10 @@ subscribe, or every launch rewrites the file.
 
 ## Testing
 
-238 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
+245 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
 that need a real scene graph (`FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`,
-`MappingTableTest`, `ContextualRibbonTest`, `ThemeSwitchingTest`) initialize the JavaFX toolkit — everything else, especially `AppStateTest`, must
+`MappingTableTest`, `ContextualRibbonTest`, `ModeViewTest`, `ThemeSwitchingTest`) initialize the
+JavaFX toolkit — everything else, especially `AppStateTest`, must
 stay toolkit-free so CI's headless runner keeps working. See the test table in
 [docs/architecture.md §9](docs/architecture.md) for what each suite covers.
 

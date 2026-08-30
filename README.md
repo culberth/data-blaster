@@ -7,9 +7,10 @@ ribbon, each with its own persisted configuration.
 
 > **Status: the modes are real; they do not do anything yet.** Selecting a mode switches the view and
 > the choice survives a restart, and every mode's settings persist under their own namespace in the
-> settings file, the ribbon changes with the mode you are in, and Preferences has a tab per scope
-> with a working port-to-tail editor. What is still missing is the four content views, which are
-> still abstract placeholders.
+> settings file, the ribbon changes with the mode you are in, Preferences has a tab per scope with a
+> working port-to-tail editor, and each mode has a view showing its live configuration. What is
+> missing is the modes themselves: nothing reads a log, sends a message or serves SOAP, and REST is
+> not designed at all.
 >
 > No mode has any behaviour: nothing reads a log, sends a message or serves SOAP. That boundary is
 > deliberate and is specified in [docs/PRD.md](docs/PRD.md), which is the work in progress.
@@ -28,7 +29,7 @@ mvn spring-boot:run
 mvn test
 ```
 
-The test suite is headless — 238 tests, no display required — so it runs unchanged on a build agent.
+The test suite is headless — 245 tests, no display required — so it runs unchanged on a build agent.
 To run one class or one method:
 
 ```bash
