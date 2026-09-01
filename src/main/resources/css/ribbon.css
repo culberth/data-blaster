@@ -191,7 +191,7 @@
 }
 
 /*
- * Read-only value read-outs (the log folder path, the Sim Factor value). These were previously
+ * Read-only value read-outs (the log folder path, a mode view's configuration). These were previously
  * greyed by setting disable="true", which applied modena's 0.4 disabled opacity — dropping
  * contrast to roughly 1.8:1 — and removed the node from screen-reader traversal entirely. This
  * keeps them visually secondary while staying legible and exposed to assistive technology.
@@ -201,7 +201,7 @@
     -fx-text-fill: -jfx-text-readout;
 }
 
-/* Small inline action inside a ribbon group (e.g. Opacity's Reset), not a top-level ribbon button. */
+/* Small inline action inside a ribbon group, not a top-level ribbon button. */
 .ribbon-inline-button {
     -fx-font-size: 10px;
     -fx-padding: 2 8 2 8;
@@ -219,6 +219,16 @@
     -fx-border-width: 2;
     -fx-border-radius: 3;
     -fx-border-insets: -1;
+}
+
+/*
+ * Check boxes inside a ribbon group. Size only: the box and tick are modena's, which the dark
+ * theme already recolours through -fx-base, so a colour here would be a literal the tokens at the
+ * top of this file could not reach.
+ */
+.ribbon-check {
+    -fx-font-size: 11px;
+    -fx-text-fill: -jfx-text;
 }
 
 .ribbon-scroll {

@@ -63,7 +63,13 @@ class AppStateTest {
         assertNull(appState.getLogFolder());
         assertTrue(appState.portTailMappings().isEmpty());
         assertSame(MessageType.MESSAGE_1, appState.getMessageType());
-        assertEquals(8081, appState.getSoapPort());
+        assertEquals(8081, appState.getBlastPort());
+        assertFalse(appState.isSingleMessage());
+        assertFalse(appState.isByteHijack());
+        assertEquals("127.0.0.1", appState.getSoapIp());
+        assertSame(SoapMessageType.TYPE_1, appState.getSoapMessageType());
+        assertTrue(appState.soapDataFiles().isEmpty());
+        assertNull(appState.getSoapTail(), "no tail is configured on a first run");
     }
 
     /**
@@ -97,9 +103,13 @@ class AppStateTest {
         assertThrowsOffThread(() -> appState.setPlaybackSpeedFactor(1.5));
         assertThrowsOffThread(() -> appState.setCurrentMode(Mode.MESSAGE));
         assertThrowsOffThread(() -> appState.setLogFolder(new File(".")));
-        assertThrowsOffThread(() -> appState.setContentOpacity(0.5));
+        assertThrowsOffThread(() -> appState.setBlastPort(9000));
+        assertThrowsOffThread(() -> appState.setSingleMessage(true));
+        assertThrowsOffThread(() -> appState.setByteHijack(true));
         assertThrowsOffThread(() -> appState.setMessageType(MessageType.MESSAGE_2));
-        assertThrowsOffThread(() -> appState.setSoapPort(9000));
+        assertThrowsOffThread(() -> appState.setSoapIp("10.0.0.1"));
+        assertThrowsOffThread(() -> appState.setSoapMessageType(SoapMessageType.TYPE_2));
+        assertThrowsOffThread(() -> appState.setSoapTail("N12345"));
     }
 
     /**
@@ -112,6 +122,16 @@ class AppStateTest {
         assertThrowsOffThread(() -> appState.addPortTailMapping(PortTailMapping.of(5001, "N12345")));
         assertThrowsOffThread(() -> appState.setPortTailMappings(List.of()));
         assertThrowsOffThread(() -> appState.removePortTailMappingForPort(5001));
+    }
+
+    /** The second collection, which gained the same guard for the same reason. */
+    @Test
+    @DisplayName("the data file mutators are guarded like every other one")
+    void theDataFileMutatorsAreGuardedLikeEveryOtherOne() throws Exception {
+        File file = new File("capture.dat");
+        assertThrowsOffThread(() -> appState.addSoapDataFiles(List.of(file)));
+        assertThrowsOffThread(() -> appState.setSoapDataFiles(List.of()));
+        assertThrowsOffThread(() -> appState.removeSoapDataFile(file));
     }
 
     @Test
@@ -128,8 +148,9 @@ class AppStateTest {
         // this pins the accessors' return types as read-only.
         for (String accessor : new String[] {
                 "currentModeProperty", "playbackSpeedFactorProperty", "logFolderProperty",
-                "contentOpacityProperty", "messageTypeProperty", "soapPortProperty",
-                "themeProperty"}) {
+                "blastPortProperty", "singleMessageProperty", "byteHijackProperty",
+                "messageTypeProperty", "soapIpProperty", "soapMessageTypeProperty",
+                "soapTailProperty", "themeProperty"}) {
             Class<?> returned = AppState.class.getMethod(accessor).getReturnType();
             assertTrue(returned.getSimpleName().startsWith("ReadOnly"),
                     accessor + " returns " + returned.getSimpleName());
@@ -141,6 +162,20 @@ class AppStateTest {
      * wrong: handing out the live {@code ObservableList} would let any caller, on any thread, add
      * an entry past both the guard and the uniqueness rules.
      */
+    @Test
+    @DisplayName("the data file list is handed out unmodifiable")
+    void theDataFileListIsHandedOutUnmodifiable() {
+        // Populated first, deliberately: clear() and remove() on an empty list are no-ops that
+        // throw nothing, so an empty fixture would let a fully mutable list pass this test.
+        appState.addSoapDataFiles(List.of(new File("capture.dat")));
+        ObservableList<File> files = appState.soapDataFiles();
+
+        assertThrows(UnsupportedOperationException.class, () -> files.add(new File("other.dat")));
+        assertThrows(UnsupportedOperationException.class, () -> files.remove(0));
+        assertThrows(UnsupportedOperationException.class, files::clear);
+        assertEquals(1, files.size(), "none of that should have got through");
+    }
+
     @Test
     @DisplayName("the mapping table is handed out unmodifiable")
     void theMappingTableIsHandedOutUnmodifiable() {
@@ -225,16 +260,76 @@ class AppStateTest {
     void thereIsNoNoModeState() {
         assertThrows(IllegalArgumentException.class, () -> appState.setCurrentMode(null));
         assertThrows(IllegalArgumentException.class, () -> appState.setMessageType(null));
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapMessageType(null));
     }
 
     @Test
-    @DisplayName("the SOAP port is range-checked where a control writes it")
-    void theSoapPortIsRangeCheckedWhereAControlWritesIt() {
-        assertThrows(IllegalArgumentException.class, () -> appState.setSoapPort(0));
-        assertThrows(IllegalArgumentException.class, () -> appState.setSoapPort(65536));
+    @DisplayName("the Blast Port is range-checked where a control writes it")
+    void theBlastPortIsRangeCheckedWhereAControlWritesIt() {
+        assertThrows(IllegalArgumentException.class, () -> appState.setBlastPort(0));
+        assertThrows(IllegalArgumentException.class, () -> appState.setBlastPort(65536));
 
-        appState.setSoapPort(65535);
-        assertEquals(65535, appState.getSoapPort());
+        appState.setBlastPort(65535);
+        assertEquals(65535, appState.getBlastPort());
+    }
+
+    /**
+     * The store validates a stored address tolerantly, falling back on nonsense. This is the other
+     * path — what the application accepts from its own controls — and it refuses rather than falls
+     * back, because a control has somewhere to put the reason and a file read does not.
+     */
+    @Test
+    @DisplayName("the SOAP address is validated where a control writes it")
+    void theSoapAddressIsValidatedWhereAControlWritesIt() {
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapIp("banana"));
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapIp("10.0.0.256"));
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapIp(""));
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapIp(null));
+
+        appState.setSoapIp("  10.0.0.1  ");
+        assertEquals("10.0.0.1", appState.getSoapIp(), "the address is normalised on the way in");
+    }
+
+    /**
+     * SOAP's tail is the one tail that is allowed to be absent — a mapping without a tail is not a
+     * mapping, but a run with no tail configured is an ordinary state.
+     */
+    @Test
+    @DisplayName("the SOAP tail is optional, normalised, and otherwise held to the same rule")
+    void theSoapTailIsOptionalAndOtherwiseHeldToTheSameRule() {
+        appState.setSoapTail(" n12345 ");
+        assertEquals("N12345", appState.getSoapTail());
+
+        assertThrows(IllegalArgumentException.class, () -> appState.setSoapTail("N123"));
+        assertEquals("N12345", appState.getSoapTail(), "a rejected edit changes nothing");
+
+        appState.setSoapTail("   ");
+        assertNull(appState.getSoapTail(), "blank means none, not a blank tail");
+
+        appState.setSoapTail(null);
+        assertNull(appState.getSoapTail());
+    }
+
+    /**
+     * Refusing a repeated file would mean a chooser could produce an edit the state rejects, which
+     * is a worse answer than quietly keeping one copy of something that means the same either way.
+     */
+    @Test
+    @DisplayName("a data file chosen twice is kept once, not refused")
+    void aDataFileChosenTwiceIsKeptOnce() {
+        File first = new File("capture.dat");
+        File second = new File("other.dat");
+
+        appState.setSoapDataFiles(List.of(first, second));
+        appState.addSoapDataFiles(List.of(first));
+
+        assertEquals(List.of(first, second), appState.soapDataFiles(),
+                "the repeat is dropped and the order is left alone");
+
+        assertTrue(appState.removeSoapDataFile(first));
+        assertEquals(List.of(second), appState.soapDataFiles());
+        assertFalse(appState.removeSoapDataFile(new File("never-added.dat")),
+                "removing a file that is not there is not an error, but it is not a change either");
     }
 
     /** Runs {@code mutation} on a non-FX thread and returns the exception it threw. */

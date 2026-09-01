@@ -5,15 +5,21 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import javafx.application.Platform;
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
+import javafx.beans.property.ReadOnlyStringProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import org.springframework.stereotype.Component;
@@ -41,10 +47,11 @@ import org.springframework.stereotype.Component;
  * stops the next one leaking them by accident. {@link Settings#from(AppState)} is the nearest live
  * example of the shape: read on the FX thread, immutable once it crosses.
  *
- * <p><strong>The same rule covers the collection.</strong> {@link #portTailMappings()} returns an
- * unmodifiable view, not the live list. Handing out the backing list would reopen exactly the hole
- * the read-only property accessors exist to close — a caller could add an entry from any thread,
- * past the guard, and bypass the uniqueness rules {@link #setPortTailMappings} enforces.
+ * <p><strong>The same rule covers the collections.</strong> {@link #portTailMappings()} and
+ * {@link #soapDataFiles()} return unmodifiable views, not the live lists. Handing out a backing
+ * list would reopen exactly the hole the read-only property accessors exist to close — a caller
+ * could add an entry from any thread, past the guard, and bypass the uniqueness rules
+ * {@link #setPortTailMappings} enforces.
  *
  * <p><strong>Listeners.</strong> This is an application-lifetime singleton and its subscribers are
  * prototype-scoped FXML controllers, so a listener registered here outlives the scene graph that
@@ -108,20 +115,57 @@ public class AppState {
     private final ObjectProperty<MessageType> messageType =
             new SimpleObjectProperty<>(Settings.DEFAULTS.message().type());
 
-    /** SOAP mode's listen port. Validated for range, never checked for availability. */
-    private final IntegerProperty soapPort =
-            new SimpleIntegerProperty(Settings.DEFAULTS.soap().port());
+    /** SOAP mode's target address. Validated for form, never checked for reachability. */
+    private final StringProperty soapIp =
+            new SimpleStringProperty(Settings.DEFAULTS.soap().ip());
+
+    /** Which kind of message SOAP mode will send. Deliberately its own enum, not Message mode's. */
+    private final ObjectProperty<SoapMessageType> soapMessageType =
+            new SimpleObjectProperty<>(Settings.DEFAULTS.soap().type());
+
+    /**
+     * SOAP mode's data files.
+     *
+     * <p>Private and never handed out, exactly like the mapping table: {@link #soapDataFiles()}
+     * exposes an unmodifiable view, and every write runs the thread guard. Order is the order they
+     * were chosen in — unlike the mappings, which sort by port, there is nothing here to sort by
+     * that a person would recognise as their own arrangement.
+     */
+    private final ObservableList<File> soapDataFiles = FXCollections.observableArrayList();
+
+    private final ObservableList<File> soapDataFilesView =
+            FXCollections.unmodifiableObservableList(soapDataFiles);
+
+    /**
+     * SOAP mode's tail number, or {@code null} if none has been set.
+     *
+     * <p>Nullable, unlike a mapping's tail. A mapping without a tail is not a mapping; a first run
+     * with no tail configured is an ordinary state, and the same one the log folder starts in.
+     */
+    private final StringProperty soapTail = new SimpleStringProperty(null);
 
     /** The colour theme. Read by {@link Settings} directly, on the FX thread. */
     private final ObjectProperty<Theme> theme =
             new SimpleObjectProperty<>(Settings.DEFAULTS.theme());
 
     /**
-     * Opacity applied to the content area. Lives here rather than as a binding between the
-     * Appearance ribbon group and the content host, so neither has to hold a reference to the
-     * other's nodes.
+     * The port data is blasted to. Global rather than mode-scoped: every mode that eventually sends
+     * anything sends it here, which is why it sits beside the theme rather than under a mode.
+     *
+     * <p>Validated for range, never checked for availability — a bind-time question, and nothing
+     * binds it yet. It replaced the content-opacity slider in the ribbon, which was a view control
+     * rather than a setting and is gone rather than moved.
      */
-    private final DoubleProperty contentOpacity = new SimpleDoubleProperty(1.0);
+    private final IntegerProperty blastPort =
+            new SimpleIntegerProperty(Settings.DEFAULTS.blastPort());
+
+    /** Whether a blast stops after one message. Global. */
+    private final BooleanProperty singleMessage =
+            new SimpleBooleanProperty(Settings.DEFAULTS.singleMessage());
+
+    /** Whether the raw bytes are intercepted on the way out. Global. */
+    private final BooleanProperty byteHijack =
+            new SimpleBooleanProperty(Settings.DEFAULTS.byteHijack());
 
     /**
      * Records the calling thread as the JavaFX Application Thread. Called once during UI start-up;
@@ -272,44 +316,168 @@ public class AppState {
 
     // --- SOAP mode ----------------------------------------------------------------------------
 
-    public ReadOnlyIntegerProperty soapPortProperty() {
-        return soapPort;
+    public ReadOnlyStringProperty soapIpProperty() {
+        return soapIp;
     }
 
-    public int getSoapPort() {
-        return soapPort.get();
+    public String getSoapIp() {
+        return soapIp.get();
     }
 
     /**
-     * Sets SOAP mode's listen port.
+     * Sets SOAP mode's target address.
+     *
+     * <p>Validated here as well as in the store, because this is the path a UI control takes and
+     * the store's tolerance rules are about files, not about what the application will accept from
+     * itself. The address is normalised on the way in, so no two callers can store the same address
+     * with different surrounding whitespace.
+     */
+    public void setSoapIp(String value) {
+        requireFxThread();
+        soapIp.set(IpAddress.requireValid(value));
+    }
+
+    public ReadOnlyObjectProperty<SoapMessageType> soapMessageTypeProperty() {
+        return soapMessageType;
+    }
+
+    public SoapMessageType getSoapMessageType() {
+        return soapMessageType.get();
+    }
+
+    public void setSoapMessageType(SoapMessageType value) {
+        requireFxThread();
+        if (value == null) {
+            throw new IllegalArgumentException("A SOAP message type is required");
+        }
+        soapMessageType.set(value);
+    }
+
+    /**
+     * SOAP mode's data files, as an unmodifiable observable view.
+     *
+     * <p>Observable so a list control can track it, unmodifiable so it cannot become a second way
+     * in — the same contract, and the same reasoning, as {@link #portTailMappings()}.
+     */
+    public ObservableList<File> soapDataFiles() {
+        return soapDataFilesView;
+    }
+
+    /**
+     * Replaces the whole set of data files, in the order given.
+     *
+     * <p>Duplicates are dropped rather than rejected. A file chosen twice is not a mistake worth
+     * refusing an edit over — it is a person picking the same file from a chooser again — and the
+     * second entry would mean nothing that the first does not.
+     */
+    public void setSoapDataFiles(Collection<File> files) {
+        requireFxThread();
+        // Built completely before anything is published, so a rejected edit cannot leave the
+        // observable list half-updated for whoever is watching it.
+        List<File> distinct = new ArrayList<>();
+        for (File file : files) {
+            if (file == null) {
+                throw new IllegalArgumentException("A data file is required");
+            }
+            if (!distinct.contains(file)) {
+                distinct.add(file);
+            }
+        }
+        soapDataFiles.setAll(distinct);
+    }
+
+    /** Appends {@code files}, skipping any already in the list. */
+    public void addSoapDataFiles(Collection<File> files) {
+        requireFxThread();
+        List<File> candidate = new ArrayList<>(soapDataFiles);
+        candidate.addAll(files);
+        setSoapDataFiles(candidate);
+    }
+
+    /** Removes {@code file}, if it is there. */
+    public boolean removeSoapDataFile(File file) {
+        requireFxThread();
+        List<File> remaining = new ArrayList<>(soapDataFiles);
+        boolean removed = remaining.remove(file);
+        if (removed) {
+            setSoapDataFiles(remaining);
+        }
+        return removed;
+    }
+
+    public ReadOnlyStringProperty soapTailProperty() {
+        return soapTail;
+    }
+
+    public String getSoapTail() {
+        return soapTail.get();
+    }
+
+    /**
+     * Sets SOAP mode's tail number, or clears it.
+     *
+     * <p>Null and blank both mean "none", so a field the user emptied clears the setting rather
+     * than storing a blank that would later fail the tail rule. Anything else must be a tail.
+     *
+     * @throws IllegalArgumentException if {@code value} is present but not a tail number
+     */
+    public void setSoapTail(String value) {
+        requireFxThread();
+        soapTail.set(TailNumber.requireValidOrAbsent(value));
+    }
+
+    // --- global -------------------------------------------------------------------------------
+
+    public ReadOnlyIntegerProperty blastPortProperty() {
+        return blastPort;
+    }
+
+    public int getBlastPort() {
+        return blastPort.get();
+    }
+
+    /**
+     * Sets the Blast Port.
      *
      * <p>Range-checked here as well as in the store, because this is the path a UI control takes
      * and the store's tolerance rules are about files, not about what the application will accept
-     * from itself.
+     * from itself. The range is {@link PortTailMapping}'s, so the mapping table and this setting
+     * cannot drift into disagreeing about what a port is.
      */
-    public void setSoapPort(int value) {
+    public void setBlastPort(int value) {
         requireFxThread();
         if (value < PortTailMapping.PORT_MIN || value > PortTailMapping.PORT_MAX) {
             throw new IllegalArgumentException(
                     "Port must be between " + PortTailMapping.PORT_MIN + " and "
                             + PortTailMapping.PORT_MAX + ", but was " + value);
         }
-        soapPort.set(value);
+        blastPort.set(value);
     }
 
-    // --- global -------------------------------------------------------------------------------
-
-    public ReadOnlyDoubleProperty contentOpacityProperty() {
-        return contentOpacity;
+    public ReadOnlyBooleanProperty singleMessageProperty() {
+        return singleMessage;
     }
 
-    public double getContentOpacity() {
-        return contentOpacity.get();
+    public boolean isSingleMessage() {
+        return singleMessage.get();
     }
 
-    public void setContentOpacity(double value) {
+    public void setSingleMessage(boolean value) {
         requireFxThread();
-        contentOpacity.set(value);
+        singleMessage.set(value);
+    }
+
+    public ReadOnlyBooleanProperty byteHijackProperty() {
+        return byteHijack;
+    }
+
+    public boolean isByteHijack() {
+        return byteHijack.get();
+    }
+
+    public void setByteHijack(boolean value) {
+        requireFxThread();
+        byteHijack.set(value);
     }
 
     public ReadOnlyObjectProperty<Theme> themeProperty() {

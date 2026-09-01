@@ -63,12 +63,16 @@ public class SettingsService {
      */
     private final ListChangeListener<PortTailMapping> mappingsListener;
 
+    /** SOAP mode's data files, for the same reason and with the same failure mode. */
+    private final ListChangeListener<File> dataFilesListener;
+
     private AppState boundState;
 
     public SettingsService(SettingsStore store) {
         this.store = store;
         this.persistListener = (observable, old, now) -> scheduleWrite();
         this.mappingsListener = change -> scheduleWrite();
+        this.dataFilesListener = change -> scheduleWrite();
     }
 
     /**
@@ -97,21 +101,36 @@ public class SettingsService {
         appState.setCurrentMode(restored.mode());
         appState.setTheme(restored.theme());
 
+        appState.setBlastPort(restored.blastPort());
+        appState.setSingleMessage(restored.singleMessage());
+        appState.setByteHijack(restored.byteHijack());
+
         Settings.LogSettings log = restored.log();
         appState.setPlaybackSpeedFactor(log.playbackSpeedFactor());
         appState.setLogFolder(log.folderPath() == null ? null : new File(log.folderPath()));
         appState.setPortTailMappings(log.mappings());
 
         appState.setMessageType(restored.message().type());
-        appState.setSoapPort(restored.soap().port());
+
+        Settings.SoapSettings soap = restored.soap();
+        appState.setSoapIp(soap.ip());
+        appState.setSoapMessageType(soap.type());
+        appState.setSoapDataFiles(soap.dataFilePaths().stream().map(File::new).toList());
+        appState.setSoapTail(soap.tail());
 
         appState.currentModeProperty().addListener(persistListener);
         appState.themeProperty().addListener(persistListener);
+        appState.blastPortProperty().addListener(persistListener);
+        appState.singleMessageProperty().addListener(persistListener);
+        appState.byteHijackProperty().addListener(persistListener);
         appState.playbackSpeedFactorProperty().addListener(persistListener);
         appState.logFolderProperty().addListener(persistListener);
         appState.portTailMappings().addListener(mappingsListener);
         appState.messageTypeProperty().addListener(persistListener);
-        appState.soapPortProperty().addListener(persistListener);
+        appState.soapIpProperty().addListener(persistListener);
+        appState.soapMessageTypeProperty().addListener(persistListener);
+        appState.soapDataFiles().addListener(dataFilesListener);
+        appState.soapTailProperty().addListener(persistListener);
 
         this.boundState = appState;
         LOG.log(System.Logger.Level.DEBUG, () -> "Settings restored from " + store.location());
@@ -166,15 +185,22 @@ public class SettingsService {
         // none but in tests is routine: a service bound to the shared AppState and never detached
         // keeps writing to a directory the test has finished with. That showed up as a temp
         // directory JUnit could not delete because something kept recreating a file in it, on Linux
-        // only, well away from anything that looked related.
+        // only, well away from anything that looked related. Both list subscriptions count: they
+        // are registered differently from the rest, which is what makes them easy to leave behind.
         if (boundState != null) {
             boundState.currentModeProperty().removeListener(persistListener);
             boundState.themeProperty().removeListener(persistListener);
+            boundState.blastPortProperty().removeListener(persistListener);
+            boundState.singleMessageProperty().removeListener(persistListener);
+            boundState.byteHijackProperty().removeListener(persistListener);
             boundState.playbackSpeedFactorProperty().removeListener(persistListener);
             boundState.logFolderProperty().removeListener(persistListener);
             boundState.portTailMappings().removeListener(mappingsListener);
             boundState.messageTypeProperty().removeListener(persistListener);
-            boundState.soapPortProperty().removeListener(persistListener);
+            boundState.soapIpProperty().removeListener(persistListener);
+            boundState.soapMessageTypeProperty().removeListener(persistListener);
+            boundState.soapDataFiles().removeListener(dataFilesListener);
+            boundState.soapTailProperty().removeListener(persistListener);
         }
 
         writer.shutdown();

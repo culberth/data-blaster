@@ -48,9 +48,13 @@ class SettingsStoreTest {
         return new Settings(
                 Mode.LOG,
                 Theme.LIGHT,
+                Settings.BLAST_PORT_DEFAULT,
+                false,
+                false,
                 new Settings.LogSettings(playbackSpeed, folderPath, List.of()),
                 new Settings.MessageSettings(MessageType.MESSAGE_1),
-                new Settings.SoapSettings(Settings.SOAP_PORT_DEFAULT));
+                new Settings.SoapSettings(
+                        Settings.SOAP_IP_DEFAULT, SoapMessageType.TYPE_1, List.of(), null));
     }
 
     // --- the happy path ---------------------------------------------------------------------
@@ -74,11 +78,15 @@ class SettingsStoreTest {
         Settings written = new Settings(
                 Mode.SOAP,
                 Theme.DARK,
+                9443,
+                true,
+                true,
                 new Settings.LogSettings(0.5, "C:\\logs", List.of(
                         PortTailMapping.of(5001, "N12345"),
                         PortTailMapping.of(5002, "000042"))),
                 new Settings.MessageSettings(MessageType.MESSAGE_3),
-                new Settings.SoapSettings(9443));
+                new Settings.SoapSettings("10.20.30.40", SoapMessageType.TYPE_3,
+                        List.of("C:\\data\\one.bin", "C:\\data\\two.bin"), "N54321"));
 
         store.write(written);
 
@@ -241,7 +249,7 @@ class SettingsStoreTest {
         assertEquals(gone.toString(), store.read().log().folderPath());
     }
 
-    // --- the mode, theme, message type and SOAP port ------------------------------------------
+    // --- the mode, theme, the global settings and the mode settings ---------------------------
 
     @Test
     @DisplayName("the selected mode is restored, and an unknown one falls back")
@@ -266,30 +274,183 @@ class SettingsStoreTest {
                 storeContaining("message.type=MESSAGE_9").read().message().type());
     }
 
-    @ParameterizedTest(name = "soap.port={0}")
+    @ParameterizedTest(name = "blastPort={0}")
     @ValueSource(strings = {"0", "-1", "65536", "banana", "", "8080.5"})
-    @DisplayName("an unreadable or out-of-range SOAP port falls back to the default")
-    void anUnreadableOrOutOfRangeSoapPortFallsBack(String raw) throws IOException {
-        assertEquals(Settings.SOAP_PORT_DEFAULT, storeContaining("soap.port=" + raw).read().soap().port(),
+    @DisplayName("an unreadable or out-of-range Blast Port falls back to the default")
+    void anUnreadableOrOutOfRangeBlastPortFallsBack(String raw) throws IOException {
+        assertEquals(Settings.BLAST_PORT_DEFAULT, storeContaining("blastPort=" + raw).read().blastPort(),
                 "'" + raw + "' should not have been accepted");
     }
 
     @Test
-    @DisplayName("a SOAP port in range is kept")
-    void aSoapPortInRangeIsKept() throws IOException {
-        assertEquals(9443, storeContaining("soap.port=9443").read().soap().port());
-        assertEquals(1, storeContaining("soap.port=1").read().soap().port());
-        assertEquals(65535, storeContaining("soap.port=65535").read().soap().port());
+    @DisplayName("a Blast Port in range is kept")
+    void aBlastPortInRangeIsKept() throws IOException {
+        assertEquals(9443, storeContaining("blastPort=9443").read().blastPort());
+        assertEquals(1, storeContaining("blastPort=1").read().blastPort());
+        assertEquals(65535, storeContaining("blastPort=65535").read().blastPort());
     }
 
     /**
-     * The default is 8081 rather than 8080 because the embedded HTTP layer binds 8080, and an
-     * out-of-box state that is already a port conflict is not a default.
+     * The reason readFlag exists rather than Boolean.parseBoolean, which reads every value that is
+     * not "true" as false. Under that implementation a typo, a stray word and a blanked line would
+     * all silently mean "off", indistinguishable from someone having turned the setting off.
+     */
+    @ParameterizedTest(name = "singleMessage={0}")
+    @ValueSource(strings = {"banana", "", "  ", "yes", "1", "on"})
+    @DisplayName("an unreadable flag falls back rather than quietly reading as off")
+    void anUnreadableFlagFallsBackRatherThanReadingAsOff(String raw) throws IOException {
+        Settings read = storeContaining("singleMessage=" + raw + "\nbyteHijack=true\n").read();
+
+        assertEquals(Settings.DEFAULTS.singleMessage(), read.singleMessage(),
+                "'" + raw + "' should have fallen back, not been read as false");
+        assertTrue(read.byteHijack(), "and the readable flag beside it should have survived");
+    }
+
+    @ParameterizedTest(name = "flag={0}")
+    @ValueSource(strings = {"true", "TRUE", "  True  "})
+    @DisplayName("a flag is read case-insensitively and trimmed")
+    void aFlagIsReadCaseInsensitivelyAndTrimmed(String raw) throws IOException {
+        assertTrue(storeContaining("singleMessage=" + raw).read().singleMessage());
+        assertTrue(storeContaining("byteHijack=" + raw).read().byteHijack());
+    }
+
+    @Test
+    @DisplayName("both flags round-trip independently")
+    void bothFlagsRoundTripIndependently() throws IOException {
+        Settings read = storeContaining("singleMessage=true\nbyteHijack=false\n").read();
+
+        assertTrue(read.singleMessage());
+        assertFalse(read.byteHijack());
+    }
+
+    // --- SOAP mode: the address, the type, the files and the tail ----------------------------
+
+    @Test
+    @DisplayName("a SOAP address is kept, trimmed")
+    void aSoapAddressIsKept() throws IOException {
+        assertEquals("10.20.30.40", storeContaining("soap.ip=  10.20.30.40  ").read().soap().ip());
+    }
+
+    /**
+     * The tolerant half of the address rule. {@code AppState} refuses these outright, because a
+     * control has somewhere to put the reason; a file read has only a log line and a fallback.
+     */
+    @ParameterizedTest(name = "soap.ip={0}")
+    @ValueSource(strings = {"banana", "", "   ", "10.0.0", "10.0.0.256", "1.2.3.4.5", "010.1.1.1",
+            "::1", "localhost"})
+    @DisplayName("an unreadable SOAP address falls back to the default")
+    void anUnreadableSoapAddressFallsBack(String raw) throws IOException {
+        assertEquals(Settings.SOAP_IP_DEFAULT, storeContaining("soap.ip=" + raw).read().soap().ip(),
+                "'" + raw + "' should not have been accepted");
+    }
+
+    @Test
+    @DisplayName("the SOAP message type is restored, and an unknown one falls back")
+    void theSoapMessageTypeIsRestored() throws IOException {
+        assertSame(SoapMessageType.TYPE_2,
+                storeContaining("soap.messageType=TYPE_2").read().soap().type());
+        assertSame(Settings.DEFAULTS.soap().type(),
+                storeContaining("soap.messageType=TYPE_9").read().soap().type());
+    }
+
+    /**
+     * The two type settings are separate values under separate keys, which is the point of their
+     * being separate enums: changing one must not change the other.
      */
     @Test
-    @DisplayName("the SOAP port does not default to the port the HTTP layer binds")
-    void theSoapPortDoesNotDefaultToTheHttpLayersPort() {
-        assertEquals(8081, Settings.DEFAULTS.soap().port());
+    @DisplayName("the SOAP message type and Message mode's type are different settings")
+    void theSoapMessageTypeAndMessageModesTypeAreDifferentSettings() throws IOException {
+        Settings read = storeContaining(
+                "message.type=MESSAGE_3\nsoap.messageType=TYPE_1\n").read();
+
+        assertSame(MessageType.MESSAGE_3, read.message().type());
+        assertSame(SoapMessageType.TYPE_1, read.soap().type());
+    }
+
+    @Test
+    @DisplayName("a SOAP tail is normalised on the way in from the file")
+    void aSoapTailIsNormalisedOnTheWayInFromTheFile() throws IOException {
+        assertEquals("N12345", storeContaining("soap.tail= n12345 ").read().soap().tail());
+    }
+
+    /**
+     * Absent rather than a default. There is no tail number this application could invent on
+     * someone's behalf, so a malformed one reads as "none configured" and says so in the log.
+     */
+    @ParameterizedTest(name = "soap.tail={0}")
+    @ValueSource(strings = {"", "   ", "N123", "N123456", "N-1234", "banana!"})
+    @DisplayName("a missing or malformed SOAP tail reads as none")
+    void aMissingOrMalformedSoapTailReadsAsNone(String raw) throws IOException {
+        assertNull(storeContaining("soap.tail=" + raw).read().soap().tail(),
+                "'" + raw + "' should not have been accepted");
+    }
+
+    @Test
+    @DisplayName("no SOAP tail key at all reads as none")
+    void noSoapTailKeyAtAllReadsAsNone() throws IOException {
+        assertNull(storeContaining("theme=dark\n").read().soap().tail());
+    }
+
+    @Test
+    @DisplayName("data files are read from one key per position, in index order")
+    void dataFilesAreReadFromOneKeyPerPosition() throws IOException {
+        Settings read = storeContaining(
+                "soap.dataFile.2=c\nsoap.dataFile.0=a\nsoap.dataFile.1=b\n").read();
+
+        assertEquals(List.of("a", "b", "c"), read.soap().dataFilePaths(),
+                "the index is a sort key, so the file's numbering decides the order, not its hash");
+    }
+
+    /**
+     * The index is a sort key rather than a slot, so a file hand-edited into a sparse or oddly
+     * numbered list still loads in the order it reads on screen.
+     */
+    @Test
+    @DisplayName("gaps in the data file numbering are harmless")
+    void gapsInTheDataFileNumberingAreHarmless() throws IOException {
+        Settings read = storeContaining(
+                "soap.dataFile.0=a\nsoap.dataFile.7=b\nsoap.dataFile.99=c\n").read();
+
+        assertEquals(List.of("a", "b", "c"), read.soap().dataFilePaths());
+    }
+
+    @Test
+    @DisplayName("a malformed data file entry is dropped on its own and the rest load")
+    void aMalformedDataFileEntryIsDroppedOnItsOwn() throws IOException {
+        Settings read = storeContaining(
+                "soap.dataFile.0=a\n"
+                        + "soap.dataFile.notaposition=b\n"
+                        + "soap.dataFile.1=\n"
+                        + "soap.dataFile.2=c\n").read();
+
+        assertEquals(List.of("a", "c"), read.soap().dataFilePaths(),
+                "one bad key must not take the readable paths down with it");
+    }
+
+    @Test
+    @DisplayName("a repeated data file path is kept once")
+    void aRepeatedDataFilePathIsKeptOnce() throws IOException {
+        Settings read = storeContaining(
+                "soap.dataFile.0=a\nsoap.dataFile.1=a\nsoap.dataFile.2=b\n").read();
+
+        assertEquals(List.of("a", "b"), read.soap().dataFilePaths());
+    }
+
+    @Test
+    @DisplayName("no data file keys is an empty list, not a failure")
+    void noDataFileKeysIsAnEmptyList() throws IOException {
+        assertTrue(storeContaining("theme=dark\n").read().soap().dataFilePaths().isEmpty());
+    }
+
+    /** The same hole the mapping keys have: distinct keys, the same number spelled two ways. */
+    @Test
+    @DisplayName("the same data file position spelled two ways is caught")
+    void theSameDataFilePositionSpelledTwoWaysIsCaught() throws IOException {
+        Settings read = storeContaining(
+                "soap.dataFile.1=a\nsoap.dataFile.01=b\n").read();
+
+        assertEquals(1, read.soap().dataFilePaths().size(),
+                "01 and 1 are the same position and must not both be loaded");
     }
 
     // --- the mapping table, which is read entry by entry --------------------------------------
@@ -447,17 +608,28 @@ class SettingsStoreTest {
         new SettingsStore(file).write(new Settings(
                 Mode.LOG,
                 Theme.LIGHT,
+                8081,
+                true,
+                false,
                 new Settings.LogSettings(1.0, null, List.of(PortTailMapping.of(5001, "N12345"))),
                 new Settings.MessageSettings(MessageType.MESSAGE_1),
-                new Settings.SoapSettings(8081)));
+                new Settings.SoapSettings("10.0.0.5", SoapMessageType.TYPE_2,
+                        List.of("C:\\data\\one.bin"), "N12345")));
 
         String contents = Files.readString(file, StandardCharsets.UTF_8);
         assertTrue(contents.contains("log.playbackSpeedFactor="), contents);
         assertTrue(contents.contains("log.mapping.5001=N12345"), contents);
         assertTrue(contents.contains("message.type="), contents);
-        assertTrue(contents.contains("soap.port="), contents);
+        assertTrue(contents.contains("soap.ip=10.0.0.5"), contents);
+        assertTrue(contents.contains("soap.messageType=TYPE_2"), contents);
+        assertTrue(contents.contains("soap.tail=N12345"), contents);
+        assertTrue(contents.contains("soap.dataFile.0="), contents);
         assertTrue(contents.contains("mode="), contents);
         assertTrue(contents.contains("theme="), contents);
+        // Unprefixed is the namespace for the settings that belong to no mode, not an oversight.
+        assertTrue(contents.contains("blastPort=8081"), contents);
+        assertTrue(contents.contains("singleMessage=true"), contents);
+        assertTrue(contents.contains("byteHijack=false"), contents);
     }
 
     // --- the location, which nothing else asserts --------------------------------------------

@@ -23,7 +23,9 @@ without being asked when status changes, a decision is made, or work lands.
   4. Removal of the loopback HTTP layer — 181 tests
   5. The contextual ribbon — 215 tests
   6. The tabbed Preferences rebuild — 238 tests
-  7. The mode views (uncommitted at time of writing) — **245 tests, 0 failures**
+  7. The mode views — 245 tests
+  8. Global settings, and SOAP re-specified (uncommitted at time of writing) —
+     **342 tests, 0 failures**
 - Version reset to **1.0.0-SNAPSHOT**. JFXRibbon's `2.0.0-SNAPSHOT` numbered its Spring Boot 4
   migration and means nothing for a renamed artifact that has never shipped.
 - **The modes are real; their views and their editors are not.** `Mode` is a first-class enum,
@@ -32,13 +34,20 @@ without being asked when status changes, a decision is made, or work lands.
 - **There is no HTTP layer.** No `web` package, no embedded Tomcat, no bound port, no
   `spring-boot-starter-webmvc`. `AppState.Snapshot` went with it — its only reader was the HTTP
   layer. Spring is here for DI and the bean lifecycle only.
-- **The ribbon follows the mode.** Three fixed slots (Mode, contextual, Appearance); the middle one
+- **The ribbon follows the mode.** Three fixed slots (Mode, contextual, Global); the middle one
   swaps with `currentMode`. Log shows a log-scaled Playback Speed slider and the log folder; Message
   shows its type; SOAP and REST show nothing and the slot un-manages itself. The Tools group was
   deleted — the log folder was its only content and it belongs to Log mode.
+- **The third slot is Global, and there is no opacity control anywhere.** Blast Port, Single Message
+  and Byte Hijack — persisted, and mirrored on the General tab. Opacity was a view control rather
+  than a setting and was the only one; it was removed rather than relocated.
+- **SOAP mode sends; it does not listen.** Its listen port is gone. It has an IPv4 address, its own
+  `SoapMessageType` enum, a list of data files and an optional tail number. `soap.port` is an
+  unknown key now, not a migrated one.
 - **Preferences is a TabPane** (General / Log / Message / SOAP; no REST tab, it has no settings).
-  Per-tab Reset; the Log tab confirms first, but only when the mapping table is non-empty. The
-  port-to-tail editor rejects bad entries at entry with the reason shown beside the controls.
+  Per-tab Reset; the Log and SOAP tabs confirm first, but only when their list is non-empty. The
+  port-to-tail editor, the SOAP address and the SOAP tail all reject bad entries at entry with the
+  reason shown beside the control.
 - **Each mode has a view** that names it and shows its live configuration read-only; REST says
   plainly it is not implemented. The views were `view1`–`view4` and also carried an inline
   `-fx-font-size` literal the theme could not reach; both are fixed.
@@ -53,7 +62,8 @@ boundary is deliberate and is the thing to push back with when scope creeps.
 
 Settled during the PRD interview: Playback Speed Factor is a multiplier (0.1–10.0, default 1.0), tail
 numbers are exactly six alphanumeric characters, SOAP defaults to port 8081, mappings are stored one
-key per port so the file format enforces port uniqueness.
+key per port so the file format enforces port uniqueness. **The SOAP port has since been superseded**
+— see the 2026-09-01 entry; `8081` survives as the Blast Port default.
 
 **Every open question is now closed (all answered 2026-08-29):** mappings are global (Q5); REST ships
 as a visible placeholder toggle (Q6); the loopback HTTP layer does **not** survive (Q10); the
@@ -144,3 +154,28 @@ favour of a log-scaled ribbon slider.
 - 2026-08-29 — R27 is **fully** done, manual steps included: the directory is
   `Projects/data-blaster` and the remote is `culberth/data-blaster`. Three files still claimed
   otherwise and have been corrected.
+- 2026-09-01 — **Replaced the opacity slider with three global settings, and re-specified SOAP
+  mode.** The ribbon's Appearance group became `Global`: Blast Port, Single Message, Byte Hijack,
+  all persisted and all mirrored on the General tab. SOAP's listen port became SOAP IP (IPv4 dotted
+  quad), a `SoapMessageType` (Type 1–3), a Data Files list behind a `FileChooser`, and an optional
+  tail number. 245 → 342 tests.
+- 2026-09-01 — **Decision: opacity was removed, not relocated.** It was a view control rather than a
+  setting — adjusted while looking at something, reset by the button beside it, deliberately not
+  persisted — and it was the only one in the application. Moving it to Preferences would have
+  advertised it as a setting that survives a restart, which it never was; leaving it beside three
+  real settings under a heading that described none of them was the other bad option.
+- 2026-09-01 — **Decision: SOAP's port became an address rather than being renamed.** SOAP mode
+  sends; it does not listen. A listen port was a setting shaped like a question the mode does not
+  ask, so `soap.port` is an unknown key now — the per-key tolerant read means an existing file
+  loses a value that meant nothing, rather than reinterpreting a port as something else.
+- 2026-09-01 — **The tail rule moved to `TailNumber`; `PortTailMapping` delegates to it.** SOAP's
+  tail is specified as having the same constraints as a mapping's, and that only stays true with one
+  implementation. It differs in exactly one deliberate way: it may be absent, because a run with no
+  tail configured is an ordinary state and a mapping without a tail is not a mapping.
+- 2026-09-01 — **Two things found while building it.** The Log tab's collision notice compared
+  against the SOAP port, which lived on a sibling tab of the same modal dialog and so could not move
+  while the Log tab was open; re-pointed at the Blast Port it can, since that is in the ribbon — so
+  the tab now subscribes to the property as well as to the table. And the General tab's
+  disabled-when-default binding cannot be a chain of `isEqualTo(...).and(...)`:
+  `BooleanExpression.isEqualTo` takes an observable rather than a literal, so the check boxes would
+  have had to be `not()`, which is only equivalent to "is default" while the default is `false`.

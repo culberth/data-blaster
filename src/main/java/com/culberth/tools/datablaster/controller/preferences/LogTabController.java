@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.collections.ListChangeListener;
 import javafx.collections.WeakListChangeListener;
 import javafx.event.ActionEvent;
@@ -110,7 +112,7 @@ public class LogTabController {
     private SpinnerValueFactory.DoubleSpinnerValueFactory playbackSpeedFactory;
 
     /**
-     * Recomputes the SOAP-port collision notice whenever the table changes.
+     * Recomputes the Blast Port collision notice whenever the table changes.
      *
      * <p>Held strongly so the weak registration on the singleton {@link AppState} lives exactly as
      * long as this controller. A collection needs a {@code ListChangeListener}: a
@@ -119,6 +121,17 @@ public class LogTabController {
      */
     private final ListChangeListener<PortTailMapping> mappingsListener =
             change -> refreshPortCollisionNotice();
+
+    /**
+     * The other half of that notice: the port it compares against can move too.
+     *
+     * <p>It could not, when this compared against SOAP mode's listen port — that lived on a sibling
+     * tab of the same modal dialog. The Blast Port is in the ribbon as well as on the General tab,
+     * so it can change while this tab is on screen, and a warning about a port that is no longer
+     * the Blast Port is worse than no warning at all.
+     */
+    private final ChangeListener<Number> blastPortListener =
+            (observable, old, port) -> refreshPortCollisionNotice();
 
     public LogTabController(AppState appState,
                             LogFolderChooser logFolderChooser,
@@ -204,6 +217,7 @@ public class LogTabController {
                 mappingTable.getSelectionModel().selectedItemProperty().isNull());
 
         appState.portTailMappings().addListener(new WeakListChangeListener<>(mappingsListener));
+        appState.blastPortProperty().addListener(new WeakChangeListener<>(blastPortListener));
         refreshPortCollisionNotice();
     }
 
@@ -300,22 +314,28 @@ public class LogTabController {
     }
 
     /**
-     * Flags a mapping port that is also the SOAP listen port, without blocking it.
+     * Flags a mapping port that is also the Blast Port, without blocking it.
+     *
+     * <p>It used to compare against SOAP mode's listen port, which no longer exists — SOAP sends
+     * rather than listens, and its port became an address. The Blast Port is the other port setting
+     * this application has, so the notice moved to it rather than being deleted: the reason it was
+     * worth raising has not changed with which port it names.
      *
      * <p>It is not an error: nothing binds either port yet, the two settings are independent, and a
      * person may well have a reason. It is worth saying out loud because the failure it predicts
-     * would appear much later, at bind time, in a different mode, with nothing pointing back here.
+     * would appear much later, at bind time, somewhere else entirely, with nothing pointing back
+     * here.
      *
-     * <p>Recomputed on every table change and whenever the SOAP port moves, so it cannot go stale
+     * <p>Recomputed on every table change and whenever the Blast Port moves, so it cannot go stale
      * while the dialog is open.
      */
     private void refreshPortCollisionNotice() {
-        int soapPort = appState.getSoapPort();
+        int blastPort = appState.getBlastPort();
         boolean collides = appState.portTailMappings().stream()
-                .anyMatch(mapping -> mapping.port() == soapPort);
+                .anyMatch(mapping -> mapping.port() == blastPort);
 
         portCollisionLabel.setText(collides
-                ? "Port " + soapPort + " is also the SOAP listen port. Allowed, but the two would "
+                ? "Port " + blastPort + " is also the Blast Port. Allowed, but the two would "
                         + "conflict if both were ever bound at once."
                 : "");
         portCollisionLabel.setVisible(collides);

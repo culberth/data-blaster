@@ -35,12 +35,12 @@ import org.springframework.boot.test.context.SpringBootTest;
  * and never re-read them. So the ordering is not a matter of taste: get it wrong and the controls
  * show defaults while the state says something else, with nothing failing and nothing logged.
  *
- * <p><strong>The subjects are the Preferences Log tab's spinner and the Mode ribbon group.</strong> The
- * template used the Appearance group's Sim Factor slider, which no longer exists — Playback Speed
- * Factor moved to Preferences, and Appearance is left with opacity, which is not persisted and so
- * cannot show this at all. The Mode group is the replacement on the ribbon side: it reads the
- * restored mode once in {@code initialize()} and selects the matching toggle, which is exactly the
- * read-once shape this test is about.
+ * <p><strong>The subjects are the Preferences Log tab's spinner and the Mode ribbon group.</strong>
+ * The template used the Appearance group's Sim Factor slider, which no longer exists — Playback
+ * Speed Factor moved to Preferences, and the Appearance group itself became the Global group. The
+ * Mode group is the replacement on the ribbon side: it reads the restored mode once in
+ * {@code initialize()} and selects the matching toggle, which is exactly the read-once shape this
+ * test is about.
  *
  * <p><strong>The groups are loaded directly rather than through the shell.</strong>
  * {@code main.fxml} puts them inside a {@code TabPane}, whose skin does not build tab content until

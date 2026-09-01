@@ -82,27 +82,34 @@ leak pass locally and fail only on CI.
 bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
   -> controller (MainController, Preferences/About, the four mode views)
        -> ui (StageRegistry, ViewRegistry, RibbonGroupRegistry, ViewSwitcher,
-              DialogService, LogScale)
+              DialogService, LogScale, PortSpinner,
+              LogFolderChooser, DataFileChooser)
      controller.ribbon      one controller per ribbon group
      controller.preferences one controller per Preferences tab
-            -> model (AppState, Mode, Settings — imports nothing from the app)
+            -> model (AppState, Mode, Settings, TailNumber, IpAddress —
+                      imports nothing from the app)
 ```
 
 `model` never imports from `controller` or `ui`. No controller imports another controller.
 
 **Key invariants enforced by the code (not just convention) — do not casually "clean up" these:**
 
-- `AppState` is the single channel for shared state (`currentMode`, `theme`, `contentOpacity`,
-  `playbackSpeedFactor`, `logFolder`, the port-to-tail mappings, `messageType`, `soapPort`). Writes
+- `AppState` is the single channel for shared state: global `currentMode`, `theme`, `blastPort`,
+  `singleMessage`, `byteHijack`; Log's `playbackSpeedFactor`, `logFolder` and the port-to-tail
+  mappings; Message's `messageType`; SOAP's `soapIp`, `soapMessageType`, data files and `soapTail`.
+  There is no `contentOpacity` — it was a view control rather than a setting and was removed, not
+  relocated, when the three global settings took its slot in the ribbon. Writes
   must happen on the FX thread (enforced by a guard that checks a `Thread` captured at startup, *not*
   `Platform.isFxApplicationThread()` — probing that would initialize the JavaFX toolkit from plain
   unit tests). Off-thread writers use `AppState.onFxThread(Runnable)`; there is deliberately **no**
   off-thread read path since the web layer went, and `AppStateTest` pins that absence.
-- The mapping collection obeys the same rules, and gets none of them for free: `portTailMappings()`
-  hands out an **unmodifiable** view (returning the live `ObservableList` reopens the hole the
-  read-only accessors close), edits replace the whole set rather than mutating it, and the mutators
-  run the thread guard. `SettingsService` subscribes to it with a `ListChangeListener` — a
-  `ChangeListener` on an `ObservableList` never fires here, so edits would persist nowhere.
+- Both collections obey the same rules, and get none of them for free: `portTailMappings()` and
+  `soapDataFiles()` hand out **unmodifiable** views (returning the live `ObservableList` reopens the
+  hole the read-only accessors close), edits replace the whole set rather than mutating it, and the
+  mutators run the thread guard. `SettingsService` subscribes to each with its own
+  `ListChangeListener` — a `ChangeListener` on an `ObservableList` never fires here, so edits would
+  persist nowhere. The mapping set rejects a duplicate; the data file list drops one, because a file
+  picked twice from a chooser is a person using a chooser rather than an error.
 - All property accessors return read-only types (`ReadOnlyDoubleProperty`, etc.) — there is
   intentionally no second, unguarded way to mutate state.
 - `AppState` subscriptions from FXML controllers must use `WeakChangeListener` — controllers are
@@ -119,9 +126,13 @@ bootstrap (Launcher, DataBlasterApplication, AppConfig, ViewLoader)
   *before* the ribbon controls subscribe to them (inside one `bind()` call, so the order can't be
   gotten wrong), reads tolerantly per-field (a bad value falls back to default and logs; a missing
   file is a silent first run), and writes off the FX thread, coalesced, with a `@PreDestroy` flush.
-  Keys are namespaced by mode (`log.*`, `message.*`, `soap.*`); `theme` and `mode` stay unprefixed.
+  Keys are namespaced by mode (`log.*`, `message.*`, `soap.*`); **unprefixed is the global
+  namespace**, not an absence of one — `mode`, `theme`, `blastPort`, `singleMessage`, `byteHijack`.
   Mappings are stored one key per port (`log.mapping.<port>=<tail>`) so the file format enforces port
-  uniqueness; tail uniqueness is checked in code, and each entry is read tolerantly on its own.
+  uniqueness; tail uniqueness is checked in code, and each entry is read tolerantly on its own. SOAP
+  data files use `soap.dataFile.<index>=<path>`, where the index is only a sort key — gaps are
+  harmless and a repeated path is dropped. Booleans are parsed explicitly: `Boolean.parseBoolean`
+  reads anything that is not `"true"` as `false`, which would make a typo silently mean "off".
 - Dark theme is implemented as token overrides in `ribbon.css` under `.root.theme-dark`, applied via
   `ThemeService` using an **invalidation** listener (not a `ChangeListener` — a `ChangeListener` here
   previously fired once and then silently stopped) and tracking scene roots weakly. `ThemeContrastTest`
@@ -138,8 +149,19 @@ controller.
 **Preferences is a `TabPane`** (General / Log / Message / SOAP; REST has no settings so it has no
 tab). Each tab is its own FXML under `fxml/preferences/` with its own prototype controller in
 `controller.preferences` — the shell owns only the Close button. **Reset is per tab**, and the Log
-tab confirms first *only when the mapping table is non-empty*, via `DialogService.confirm` — an
+and SOAP tabs confirm first *only when their list is non-empty*, via `DialogService.confirm` — an
 inline `Alert` gets neither owner nor stylesheet and renders light under the dark theme.
+
+**The ribbon's third slot is the `Global` group**, not `Appearance`: Blast Port, Single Message,
+Byte Hijack, all also on the General tab and neither surface holding a copy. Port spinners are
+configured through `ui.PortSpinner` rather than per controller — bounds from `PortTailMapping`'s
+range, a converter that survives nonsense, and an `increment(0)` commit on focus loss.
+
+**SOAP mode sends; it does not listen.** Its settings are an IPv4 address (`IpAddress`, dotted quad
+with parsed octets and no leading zeros — hostnames and IPv6 are deliberately out), its own
+`SoapMessageType` enum, a list of data files, and an optional tail number. The tail rule lives in
+`TailNumber` and `PortTailMapping` delegates to it, so "the same constraints as a mapping's tail"
+has one implementation; SOAP's differs only in being allowed to be absent.
 
 **The mapping editor** binds to `AppState.portTailMappings()` directly (the unmodifiable view, so
 column sorting is off — a sort would reorder it in place). Both columns are `String` columns
@@ -157,7 +179,7 @@ needed. A group's `initialize()` runs before the shell's (FXMLLoader builds dept
 *subscribe* to `AppState` there but must not *publish*, since the shell hasn't run yet and will
 overwrite it.
 
-**The ribbon is contextual.** Three fixed slots — Mode, the contextual slot, Appearance — and the
+**The ribbon is contextual.** Three fixed slots — Mode, the contextual slot, Global — and the
 middle one swaps with `currentMode` via `ContextualGroupController` + `RibbonGroupRegistry`. Only
 `LOG` and `MESSAGE` have a group; SOAP and REST leave the slot empty **and un-managed**, so it
 reserves no width. The slot swaps *itself* rather than being swapped by `MainController` — that is
@@ -172,14 +194,14 @@ rounded number is what gets stored — don't move that rounding into the display
 also *follows* `AppState` rather than reading it once, which needs the re-entrancy guard in
 `LogGroupController`.
 
-**Adding a mode setting:** a field on `AppState` (read-only accessor + guarded mutator), a component
-on the matching nested record in `Settings`, a namespaced key with a tolerant read in
-`SettingsStore`, and a restore + subscribe line in `SettingsService.bind()` — restore before
-subscribe, or every launch rewrites the file.
+**Adding a setting:** a field on `AppState` (read-only accessor + guarded mutator), a component on
+the matching nested record in `Settings` — or on `Settings` itself if it is global — a key with a
+tolerant read in `SettingsStore`, and a restore + subscribe line in `SettingsService.bind()` —
+restore before subscribe, or every launch rewrites the file.
 
 ## Testing
 
-245 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
+342 tests, all headless by default (`HeadlessToolkit` / Monocle software Glass platform). Only tests
 that need a real scene graph (`FxmlSmokeTest`, `SettingsRestoreOrderTest`, `PreferencesSurfaceTest`,
 `MappingTableTest`, `ContextualRibbonTest`, `ModeViewTest`, `ThemeSwitchingTest`) initialize the
 JavaFX toolkit — everything else, especially `AppStateTest`, must

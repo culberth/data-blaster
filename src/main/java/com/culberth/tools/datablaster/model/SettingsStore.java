@@ -31,15 +31,23 @@ import org.springframework.stereotype.Component;
  * convenience — "where did my setting go" should be answerable with a file manager.
  *
  * <p><strong>Keys are namespaced, not nested.</strong> {@code Properties} is flat, so a mode's
- * settings are grouped by a key prefix: {@code log.*}, {@code message.*}, {@code soap.*}, with
- * {@code theme} and {@code mode} unprefixed because they are not mode-scoped. {@code log.mapping.5001}
- * is one key with dots in it, so reading the mapping set means filtering
- * {@link Properties#stringPropertyNames()} by prefix rather than calling a fixed getter.
+ * settings are grouped by a key prefix: {@code log.*}, {@code message.*}, {@code soap.*}. Unprefixed
+ * is not an oversight but the namespace for the settings that belong to no mode - {@code mode},
+ * {@code theme}, {@code blastPort}, {@code singleMessage} and {@code byteHijack}.
+ * {@code log.mapping.5001} is one key with dots in it, so reading the mapping set means filtering
+ * {@link Properties#stringPropertyNames()} by prefix rather than calling a fixed getter; the same
+ * goes for {@code soap.dataFile.0}.
  *
  * <p><strong>The mapping port is the key, deliberately.</strong> A properties file cannot hold the
  * same key twice, so port uniqueness is a property of the format rather than a check someone has to
  * remember on the read path. Tail uniqueness is the direction the format cannot enforce, so
  * {@link #readMappings} checks it.
+ *
+ * <p><strong>The data-file index is a key for a different reason.</strong> A file list has no
+ * natural key, so the index exists only to make the order reproducible: the entries are read in
+ * ascending index order rather than in whatever order {@code Properties} happened to hash them
+ * into. Gaps and repeats in the numbering are therefore harmless, and a repeated path is dropped,
+ * since a second copy means nothing the first does not.
  *
  * <p><strong>This class knows nothing about {@link AppState} or JavaFX.</strong> That is what lets
  * the tolerance rules below be tested against hand-written broken files, with no toolkit and no
@@ -65,6 +73,10 @@ public class SettingsStore {
     private static final String KEY_MODE = "mode";
     private static final String KEY_THEME = "theme";
 
+    private static final String KEY_BLAST_PORT = "blastPort";
+    private static final String KEY_SINGLE_MESSAGE = "singleMessage";
+    private static final String KEY_BYTE_HIJACK = "byteHijack";
+
     private static final String KEY_PLAYBACK_SPEED_FACTOR = "log.playbackSpeedFactor";
     private static final String KEY_LOG_FOLDER = "log.folder";
 
@@ -73,7 +85,12 @@ public class SettingsStore {
 
     private static final String KEY_MESSAGE_TYPE = "message.type";
 
-    private static final String KEY_SOAP_PORT = "soap.port";
+    private static final String KEY_SOAP_IP = "soap.ip";
+    private static final String KEY_SOAP_MESSAGE_TYPE = "soap.messageType";
+    private static final String KEY_SOAP_TAIL = "soap.tail";
+
+    /** Everything after this prefix is a position in the list; the value is the path. */
+    private static final String KEY_SOAP_DATA_FILE_PREFIX = "soap.dataFile.";
 
     private final Path file;
 
@@ -127,6 +144,9 @@ public class SettingsStore {
         return new Settings(
                 Mode.fromStoredName(properties.getProperty(KEY_MODE), Settings.DEFAULTS.mode()),
                 Theme.fromStoredName(properties.getProperty(KEY_THEME), Settings.DEFAULTS.theme()),
+                readPort(properties, KEY_BLAST_PORT, Settings.DEFAULTS.blastPort()),
+                readFlag(properties, KEY_SINGLE_MESSAGE, Settings.DEFAULTS.singleMessage()),
+                readFlag(properties, KEY_BYTE_HIJACK, Settings.DEFAULTS.byteHijack()),
                 new Settings.LogSettings(
                         readPlaybackSpeedFactor(properties),
                         readLogFolder(properties),
@@ -134,7 +154,13 @@ public class SettingsStore {
                 new Settings.MessageSettings(MessageType.fromStoredName(
                         properties.getProperty(KEY_MESSAGE_TYPE),
                         Settings.DEFAULTS.message().type())),
-                new Settings.SoapSettings(readSoapPort(properties)));
+                new Settings.SoapSettings(
+                        readSoapIp(properties),
+                        SoapMessageType.fromStoredName(
+                                properties.getProperty(KEY_SOAP_MESSAGE_TYPE),
+                                Settings.DEFAULTS.soap().type()),
+                        readDataFilePaths(properties),
+                        readSoapTail(properties)));
     }
 
     /**
@@ -153,6 +179,9 @@ public class SettingsStore {
         Properties properties = new Properties();
         properties.setProperty(KEY_MODE, settings.mode().storedName());
         properties.setProperty(KEY_THEME, settings.theme().storedName());
+        properties.setProperty(KEY_BLAST_PORT, Integer.toString(settings.blastPort()));
+        properties.setProperty(KEY_SINGLE_MESSAGE, Boolean.toString(settings.singleMessage()));
+        properties.setProperty(KEY_BYTE_HIJACK, Boolean.toString(settings.byteHijack()));
 
         Settings.LogSettings log = settings.log();
         properties.setProperty(KEY_PLAYBACK_SPEED_FACTOR, Double.toString(log.playbackSpeedFactor()));
@@ -164,7 +193,17 @@ public class SettingsStore {
         }
 
         properties.setProperty(KEY_MESSAGE_TYPE, settings.message().type().storedName());
-        properties.setProperty(KEY_SOAP_PORT, Integer.toString(settings.soap().port()));
+
+        Settings.SoapSettings soap = settings.soap();
+        properties.setProperty(KEY_SOAP_IP, soap.ip());
+        properties.setProperty(KEY_SOAP_MESSAGE_TYPE, soap.type().storedName());
+        if (soap.tail() != null) {
+            properties.setProperty(KEY_SOAP_TAIL, soap.tail());
+        }
+        List<String> dataFilePaths = soap.dataFilePaths();
+        for (int index = 0; index < dataFilePaths.size(); index++) {
+            properties.setProperty(KEY_SOAP_DATA_FILE_PREFIX + index, dataFilePaths.get(index));
+        }
 
         try {
             Path directory = file.getParent();
@@ -269,9 +308,15 @@ public class SettingsStore {
         return raw;
     }
 
-    private int readSoapPort(Properties properties) {
-        int fallback = Settings.DEFAULTS.soap().port();
-        String raw = properties.getProperty(KEY_SOAP_PORT);
+    /**
+     * A port value, falling back on anything unreadable or out of range.
+     *
+     * <p>Shared by every port-shaped setting rather than written once per key, so a second port
+     * cannot quietly acquire a laxer rule than the first. The range is {@link PortTailMapping}'s,
+     * the same one {@code AppState} enforces where a control writes it.
+     */
+    private int readPort(Properties properties, String key, int fallback) {
+        String raw = properties.getProperty(key);
         if (raw == null) {
             return fallback;
         }
@@ -280,15 +325,133 @@ public class SettingsStore {
             value = Integer.parseInt(raw.trim());
         } catch (NumberFormatException e) {
             LOG.log(System.Logger.Level.WARNING,
-                    "Ignoring unreadable " + KEY_SOAP_PORT + " '" + raw + "' in " + file);
+                    "Ignoring unreadable " + key + " '" + raw + "' in " + file);
             return fallback;
         }
         if (value < PortTailMapping.PORT_MIN || value > PortTailMapping.PORT_MAX) {
             LOG.log(System.Logger.Level.WARNING,
-                    "Ignoring out-of-range " + KEY_SOAP_PORT + " " + value + " in " + file);
+                    "Ignoring out-of-range " + key + " " + value + " in " + file);
             return fallback;
         }
         return value;
+    }
+
+    /**
+     * A boolean value, falling back on anything that is neither {@code true} nor {@code false}.
+     *
+     * <p>Deliberately not {@code Boolean.parseBoolean}, which reads every value that is not
+     * {@code "true"} as {@code false} - so a typo, a stray word or an accidentally blanked line
+     * would all silently mean "off", with nothing logged and no way to tell that apart from someone
+     * having turned the setting off. That is exactly the quiet mis-read the rest of this class
+     * exists to avoid.
+     */
+    private boolean readFlag(Properties properties, String key, boolean fallback) {
+        String raw = properties.getProperty(key);
+        if (raw == null) {
+            return fallback;
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if ("true".equals(value)) {
+            return true;
+        }
+        if ("false".equals(value)) {
+            return false;
+        }
+        LOG.log(System.Logger.Level.WARNING,
+                "Ignoring unreadable " + key + " '" + raw + "' in " + file);
+        return fallback;
+    }
+
+    private String readSoapIp(Properties properties) {
+        String fallback = Settings.DEFAULTS.soap().ip();
+        String raw = properties.getProperty(KEY_SOAP_IP);
+        if (raw == null) {
+            return fallback;
+        }
+        try {
+            return IpAddress.requireValid(raw);
+        } catch (IllegalArgumentException malformed) {
+            LOG.log(System.Logger.Level.WARNING,
+                    "Ignoring " + KEY_SOAP_IP + " in " + file + ": " + malformed.getMessage());
+            return fallback;
+        }
+    }
+
+    /**
+     * The stored tail number, or {@code null}.
+     *
+     * <p>Absent is a legitimate state for this one, unlike a mapping's tail, so a missing key is
+     * not something to fall back from - and a malformed one falls back to absent rather than to a
+     * default, because there is no tail number this application could invent on someone's behalf.
+     */
+    private String readSoapTail(Properties properties) {
+        String raw = properties.getProperty(KEY_SOAP_TAIL);
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return TailNumber.requireValid(raw);
+        } catch (IllegalArgumentException malformed) {
+            LOG.log(System.Logger.Level.WARNING,
+                    "Ignoring " + KEY_SOAP_TAIL + " in " + file + ": " + malformed.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Every readable {@code soap.dataFile.<index>=<path>} entry, in index order.
+     *
+     * <p>Entry by entry, for the reason the mapping table is: one unreadable key must not discard
+     * the other nineteen paths. Read in two passes so the result does not depend on
+     * {@code Properties}' unspecified iteration order.
+     *
+     * <p>Paths are not checked for existence. Nothing reads these files yet, and dropping a choice
+     * because a network drive was offline at start-up is the same bad trade the log folder refuses
+     * to make.
+     */
+    private List<String> readDataFilePaths(Properties properties) {
+        SortedMap<Integer, String> pathsByIndex = new TreeMap<>();
+
+        for (String key : properties.stringPropertyNames()) {
+            if (!key.startsWith(KEY_SOAP_DATA_FILE_PREFIX)) {
+                continue;
+            }
+            String indexText = key.substring(KEY_SOAP_DATA_FILE_PREFIX.length()).trim();
+            int index;
+            try {
+                index = Integer.parseInt(indexText);
+            } catch (NumberFormatException e) {
+                LOG.log(System.Logger.Level.WARNING,
+                        "Ignoring data file '" + key + "' in " + file + ": '" + indexText
+                                + "' is not a position");
+                continue;
+            }
+            String path = properties.getProperty(key);
+            if (path == null || path.isBlank()) {
+                LOG.log(System.Logger.Level.WARNING,
+                        "Ignoring data file '" + key + "' in " + file + ": no path");
+                continue;
+            }
+            String previous = pathsByIndex.putIfAbsent(index, path.trim());
+            if (previous != null) {
+                LOG.log(System.Logger.Level.WARNING,
+                        "Ignoring data file '" + key + "' in " + file + ": position " + index
+                                + " is already spelled another way in this file");
+            }
+        }
+
+        // Duplicates are dropped here as well as in SoapSettings, so the log line naming the
+        // skipped path exists at the point the file is actually being read.
+        List<String> accepted = new ArrayList<>(pathsByIndex.size());
+        for (String path : pathsByIndex.values()) {
+            if (accepted.contains(path)) {
+                LOG.log(System.Logger.Level.WARNING,
+                        "Ignoring repeated data file '" + path + "' in " + file);
+                continue;
+            }
+            accepted.add(path);
+        }
+        return accepted;
     }
 
     /**

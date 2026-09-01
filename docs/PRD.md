@@ -4,7 +4,10 @@
 **Repository:** `Projects/data-blaster/`, remote `culberth/data-blaster` — both renamed; see R27
 **Type:** JavaFX + Spring Boot desktop tool, forked from JFXRibbon
 **Created:** 2026-08-29
-**Status:** v1 scope — supersedes the archetype PRD, which described a different project
+**Status:** v1 scope — supersedes the archetype PRD, which described a different project.
+**Partly superseded in turn**, 2026-09-01: the settings themselves changed after v1 shipped its
+scope — see *Amendment, 2026-09-01* below. The requirements below are left as agreed rather than
+rewritten; where they and the amendment disagree, the amendment is what the code does.
 **Baseline:** `main` at `9739cb3`, version `2.0.0-SNAPSHOT`
 
 ---
@@ -288,6 +291,10 @@ character class that accepts `------` is not a validator.
 
 ### `AppState` shape after this change
 
+> **Superseded 2026-09-01** — this is the shape v1 was built to. See *Amendment, 2026-09-01* for
+> what it is now: `contentOpacity` is gone, three global settings replaced it, and `soapPort` became
+> four SOAP settings.
+
 ```
 currentMode       ObjectProperty<Mode>         persisted
 theme             ObjectProperty<Theme>        persisted
@@ -393,3 +400,68 @@ violate:
 | D13 | The product is Data Blaster; the rename lands as its own commit before the mode work | Renaming alongside the feature work; deferring the rename until v1 ships | The rename is a large mechanical diff touching almost every file. Keeping it separate leaves the mode commits reviewable. Deferring it would mean shipping a settings directory named after the template and then needing a migration |
 | D14 | Display name `Data Blaster`; directory and executable `DataBlaster`, package `datablaster` | A space everywhere; a hyphen (`data-blaster`) everywhere | A space in `%APPDATA%` paths and executable names is legal but quoted-or-broken in every script that touches it. The hyphen form is kept for the Maven artifactId, where it is conventional |
 | D15 | Version resets to `1.0.0-SNAPSHOT` | Continuing from `2.0.0-SNAPSHOT` | The `2.0.0` bump numbered JFXRibbon's Spring Boot 4 migration, which is meaningless for a renamed artifact that has never been released. Costs a discontinuity with the inherited git history, which the rename commit already makes obvious |
+
+---
+
+## Amendment, 2026-09-01 — global settings, and SOAP re-specified
+
+Requested after v1's scope was complete. It does not widen v1's boundary: **the modes are still
+configurable and still do nothing.** What changed is *which* settings there are.
+
+### The opacity slider is replaced by three global settings
+
+| Setting | Type | Default | Surfaces |
+|---|---|---|---|
+| Blast Port | port, 1–65535 | `8081` | Global ribbon group, Preferences → General |
+| Single Message | flag | `false` | Global ribbon group, Preferences → General |
+| Byte Hijack | flag | `false` | Global ribbon group, Preferences → General |
+
+The ribbon's third fixed slot is called **Global** rather than Appearance, because none of the three
+affects appearance.
+
+**Opacity is removed, not relocated.** It was a view control rather than a setting — adjusted while
+looking at something, reset by the button beside it, deliberately excluded from persistence (see the
+*What is deliberately not persisted* reasoning above) — and it was the only one in the application.
+Moving it to Preferences would have advertised it as something that survives a restart, which it
+never was. `AppState.contentOpacity` and the content area's binding to it are both gone.
+
+### SOAP mode's port is replaced by four settings
+
+| Setting | Type | Default | Notes |
+|---|---|---|---|
+| SOAP IP | IPv4 dotted quad | `127.0.0.1` | octets parsed and range-checked; leading zeros refused |
+| SOAP Message Type | `Type_1` / `Type_2` / `Type_3` | `TYPE_1` | its own enum, not Message mode's |
+| Data Files | list of files, via a `FileChooser` | empty | order is the order chosen; repeats dropped |
+| Tail Number | six alphanumeric characters, or absent | none | the same rule as a mapping's tail |
+
+**This is a re-specification, not a rename.** SOAP mode sends; it does not listen. A listen port was
+a setting shaped like a question the mode does not ask, so `soap.port` becomes an unknown key rather
+than a migrated one — the per-key tolerant read means an existing file loses a value that meant
+nothing, rather than reinterpreting a port as a destination.
+
+`8081` survives as the Blast Port's default, so R11's reasoning about not colliding with `8080` is
+carried forward rather than discarded.
+
+**The tail rule is shared, not copied.** It lives in `TailNumber`; `PortTailMapping` delegates to it.
+Two copies of a six-character pattern would eventually be a validator and a table disagreeing about
+whether `N123` is a tail. SOAP's tail differs in exactly one deliberate way: it may be absent,
+because a run with no tail configured is an ordinary state and a mapping without a tail is not a
+mapping.
+
+**IPv4 only, deliberately.** A hostname pattern accepts very nearly any string, which is the point
+at which a validator stops catching typos; IPv6 is validation surface for a mode with no behaviour.
+Either is a widened pattern plus a test if it turns up — a smaller change than narrowing a rule
+people have already stored values against.
+
+### Consequences elsewhere
+
+- The Log tab's port-collision notice compares against the Blast Port rather than the SOAP port. It
+  also had to start subscribing to that property: the SOAP port lived on a sibling tab of the same
+  modal dialog and could not move while the Log tab was open; the Blast Port is in the ribbon, so it
+  can.
+- The SOAP mode view shows the address, the message type, a data file **count** and the tail — a
+  count for the same reason Log shows a mapping count.
+- The SOAP tab's Reset confirms first when the data file list is non-empty, matching the Log tab.
+- Persisted keys added: `blastPort`, `singleMessage`, `byteHijack` (unprefixed — the global
+  namespace), `soap.ip`, `soap.messageType`, `soap.tail`, `soap.dataFile.<index>`. Removed:
+  `soap.port`.

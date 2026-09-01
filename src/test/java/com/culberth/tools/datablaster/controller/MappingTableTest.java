@@ -57,7 +57,7 @@ class MappingTableTest {
     void resetSharedState() {
         HeadlessToolkit.onFxThread(() -> {
             appState.setPortTailMappings(List.of());
-            appState.setSoapPort(8081);
+            appState.setBlastPort(8081);
         });
     }
 
@@ -290,7 +290,7 @@ class MappingTableTest {
         });
     }
 
-    // --- the SOAP-port collision notice (R19) -------------------------------------------------
+    // --- the Blast Port collision notice (R19) ------------------------------------------------
 
     /**
      * A warning, not a block. Nothing binds either port yet and the two settings are independent, so
@@ -298,10 +298,10 @@ class MappingTableTest {
      * later, at bind time, in a different mode, with nothing pointing back here.
      */
     @Test
-    @DisplayName("a mapping port that matches the SOAP port is flagged but allowed")
-    void aMappingPortThatMatchesTheSoapPortIsFlaggedButAllowed() {
+    @DisplayName("a mapping port that matches the Blast Port is flagged but allowed")
+    void aMappingPortThatMatchesTheBlastPortIsFlaggedButAllowed() {
         HeadlessToolkit.onFxThread(() -> {
-            appState.setSoapPort(8081);
+            appState.setBlastPort(8081);
             Parent tab = viewLoader.loadParent(LOG_TAB);
             Label notice = (Label) tab.lookup("#portCollisionLabel");
             assertFalse(notice.isVisible(), "nothing collides yet");
@@ -318,7 +318,7 @@ class MappingTableTest {
     @DisplayName("the collision notice clears when the collision goes away")
     void theCollisionNoticeClearsWhenTheCollisionGoesAway() {
         HeadlessToolkit.onFxThread(() -> {
-            appState.setSoapPort(8081);
+            appState.setBlastPort(8081);
             Parent tab = viewLoader.loadParent(LOG_TAB);
             Label notice = (Label) tab.lookup("#portCollisionLabel");
             typeAndAdd(tab, "8081", "N12345");

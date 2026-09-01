@@ -7,31 +7,16 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /**
  * One entry in Log mode's port-to-tail-number table: traffic arriving on {@code port} belongs to
  * the aircraft registered as {@code tail}.
  *
- * <p><strong>The tail is a {@code String}, and that is not an oversight.</strong> A tail number may
- * be all digits, so an integer type is superficially tempting — and wrong twice over. It would turn
- * {@code 000042} into {@code 42} on the first round-trip through the settings file, and it cannot
- * hold {@code N12345} at all.
- *
- * <p><strong>What counts as a tail number: exactly six alphanumeric characters, upper-cased.</strong>
- * No fixed prefix — {@code N} has no special status, and a registration and a six-digit number are
- * equally valid. The length is exact rather than a maximum, which makes this a stricter validator
- * than a real-world registration rule would be; stricter is where its typo-catching value is, since
- * {@code N123} is far more likely to be a slip than a deliberate short tail.
- *
- * <p>This rejects hyphenated foreign registrations — {@code G-ABCD} is six characters only if the
- * hyphen counts, and it does not. That follows from the rule as specified rather than being a
- * decision about non-US aircraft; if such tails turn up it is one character in {@link #TAIL_PATTERN}
- * plus a test. It is flagged rather than allowed pre-emptively, because a character class that also
- * accepts {@code ------} has stopped validating anything.
+ * <p><strong>What counts as a tail number lives in {@link TailNumber}</strong>, not here. SOAP mode
+ * carries a standalone tail under the same rule, and "the same rule" only stays true with one
+ * implementation of it.
  *
  * <p><strong>No instance of this record can be invalid.</strong> The canonical constructor
  * normalises and validates, so there is no back door around {@link #of}: a mapping either holds a
@@ -43,40 +28,26 @@ import java.util.regex.Pattern;
 public record PortTailMapping(int port, String tail) {
 
     /**
-     * The valid TCP port range, shared with the SOAP port setting.
+     * The valid TCP port range, shared with the global Blast Port setting.
      *
      * <p>Defined here rather than on {@link Settings} because this is the class that validates a
-     * port; {@code Settings.SoapSettings} refers back to these so the two cannot drift into
-     * disagreeing about what a port is.
+     * port; the Blast Port refers back to these so the two cannot drift into disagreeing about what
+     * a port is.
      */
     public static final int PORT_MIN = 1;
 
     /** @see #PORT_MIN */
     public static final int PORT_MAX = 65535;
 
-    /** Exactly six characters — see the class Javadoc for why this is not a maximum. */
-    public static final int TAIL_LENGTH = 6;
-
-    /** Applied after trimming and upper-casing, so it needs no case-insensitive flag. */
-    public static final Pattern TAIL_PATTERN = Pattern.compile("[A-Z0-9]{" + TAIL_LENGTH + "}");
-
     public PortTailMapping {
         if (port < PORT_MIN || port > PORT_MAX) {
             throw new IllegalArgumentException(
                     "Port must be between " + PORT_MIN + " and " + PORT_MAX + ", but was " + port);
         }
-        if (tail == null) {
-            throw new IllegalArgumentException("Tail number is required");
-        }
-        // Normalise here rather than only in of(), so no construction path can produce a mapping
+        // Normalised here rather than only in of(), so no construction path can produce a mapping
         // whose tail differs from another's by case alone — which would defeat the uniqueness
         // check in requireUniquePortsAndTails, since "n12345" and "N12345" are different Strings.
-        tail = normaliseTail(tail);
-        if (!TAIL_PATTERN.matcher(tail).matches()) {
-            throw new IllegalArgumentException(
-                    "Tail number must be exactly " + TAIL_LENGTH + " letters or digits, but was '"
-                            + tail + "'");
-        }
+        tail = TailNumber.requireValid(tail);
     }
 
     /**
@@ -90,11 +61,6 @@ public record PortTailMapping(int port, String tail) {
      */
     public static PortTailMapping of(int port, String rawTail) {
         return new PortTailMapping(port, rawTail);
-    }
-
-    /** Trim and upper-case, the two steps every comparison in this class assumes have happened. */
-    public static String normaliseTail(String rawTail) {
-        return rawTail == null ? null : rawTail.trim().toUpperCase(Locale.ROOT);
     }
 
     /**
