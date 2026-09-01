@@ -18,9 +18,8 @@ import org.springframework.stereotype.Component;
  * Controller for the application shell: the menu bar and the content host.
  *
  * <p>The ribbon groups are {@code <fx:include>}s with their own controllers, and they communicate
- * with this class only through {@link AppState} — they set the current mode and the content
- * opacity, and the shell reacts. Neither side holds a reference to the other's nodes, so a new
- * ribbon group needs no change here.
+ * with this class only through {@link AppState} — they set the current mode, and the shell reacts.
+ * Neither side holds a reference to the other's nodes, so a new ribbon group needs no change here.
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
@@ -54,8 +53,6 @@ public class MainController {
 
     @FXML
     private void initialize() {
-        contentArea.opacityProperty().bind(appState.contentOpacityProperty());
-
         appState.currentModeProperty().addListener(new WeakChangeListener<>(modeListener));
 
         // Render whatever is current, rather than relying on a value transition: AppState is an

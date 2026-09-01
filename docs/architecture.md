@@ -43,14 +43,16 @@ below: where duplication is tolerated, and where it is not.
                      |
                      v
   controller   MainController · Preferences/About · the four mode views
-               ribbon: Mode · contextual slot (Log | Message) · Appearance
+               ribbon: Mode · contextual slot (Log | Message) · Global
       |              |
       |              v
       |         ui   StageRegistry · ViewRegistry · RibbonGroupRegistry · ViewSwitcher
-      |              DialogService · LogScale
+      |              DialogService · LogScale · PortSpinner
+      |              LogFolderChooser · DataFileChooser
       |              |
       v              v
-        model        AppState · Mode · Settings  (imports nothing from the application)
+        model        AppState · Mode · Settings · TailNumber · IpAddress
+                     (imports nothing from the application)
 ```
 
 **The rule: dependencies point inward, toward `model`.** `model` imports nothing from `controller`
@@ -108,14 +110,19 @@ and no shutdown hooks — including the settings flush.
 
 ## 4. State and threading
 
-`AppState` is a singleton holding `currentMode`, `theme` and `contentOpacity`, Log mode's
-`playbackSpeedFactor`, `logFolder` and port-to-tail mappings, Message mode's `messageType` and
-SOAP's `soapPort`. It is the only channel through which the ribbon groups, the shell and the
-Preferences dialog communicate.
+`AppState` is a singleton holding the global `currentMode`, `theme`, `blastPort`, `singleMessage`
+and `byteHijack`; Log mode's `playbackSpeedFactor`, `logFolder` and port-to-tail mappings; Message
+mode's `messageType`; and SOAP mode's `soapIp`, `soapMessageType`, data files and `soapTail`. It is
+the only channel through which the ribbon groups, the shell and the Preferences dialog communicate.
 
-Everything but the mappings is a JavaFX property. The mappings are an `ObservableList` — which is
-what makes them the interesting case below, because none of the rules this class enforces were
-written with a collection in mind.
+Everything but the two lists is a JavaFX property. The mappings and the SOAP data files are
+`ObservableList`s — which is what makes them the interesting case below, because none of the rules
+this class enforces were written with a collection in mind.
+
+**`contentOpacity` used to be here and is gone.** It was a view control rather than a setting, and
+it was the only one; when the three global settings took its slot in the ribbon (§6) it was removed
+rather than relocated, because a lone view control with nowhere to live is a category with one
+member. The state it needed — a `DoubleProperty` the content area bound to — went with it.
 
 **The fields are flat; the persisted form is not.** `AppState` does not nest the mode-scoped values
 in per-mode holders the way `Settings` does. That is an implementation choice rather than a product
@@ -215,9 +222,9 @@ FXML under `fxml/ribbon/` with its own controller in `controller.ribbon`, pulled
 `<fx:include>`.
 
 **Groups and the shell never hold each other's nodes.** The Mode group publishes a `Mode`; the
-shell observes it and performs the swap. The Appearance group writes `contentOpacity`; the content
-area binds to it. The obvious alternative — handing each group a reference to the content pane —
-recreates the shared-mutable-node defect that `ViewSwitcher` was made stateless to eliminate.
+shell observes it and performs the swap. Every other group writes a setting to `AppState` and lets
+whoever cares read it there. The obvious alternative — handing each group a reference to the content
+pane — recreates the shared-mutable-node defect that `ViewSwitcher` was made stateless to eliminate.
 
 **The toggles carry `Mode` constant names in `userData`.** Keying `ViewRegistry` by the enum turned
 half of the old free-string wiring into a compiler error; the half that remains is the markup, where
@@ -235,7 +242,7 @@ Adding a ribbon group is a new FXML, a new controller, and one `<fx:include>` li
 
 ### The contextual slot
 
-Three groups are fixed — Mode, the contextual slot, and Appearance — and the middle one swaps its
+Three groups are fixed — Mode, the contextual slot, and Global — and the middle one swaps its
 contents with `currentMode`. Log shows playback speed and the log folder; Message shows its type;
 SOAP and REST show nothing.
 
@@ -246,9 +253,10 @@ with one `<fx:include>` exactly like the fixed groups, and knows nothing about w
 is the same shape as the content-area swap, one level down.
 
 **Only Log and Message have a group, by decision.** A ribbon is for controls reached for repeatedly.
-Playback speed is scrubbed and message type is flipped between sends; SOAP's port is set once and
-belongs in Preferences, and REST has no behaviour to configure. Giving every mode a group would fill
-the ribbon with controls nobody reaches for and put a set-once port one mis-click away.
+Playback speed is scrubbed and message type is flipped between sends; SOAP's address, type, files
+and tail are all set once for a run and belong in Preferences, and REST has no behaviour to
+configure. Giving every mode a group would fill the ribbon with controls nobody reaches for and put
+set-once values one mis-click away.
 `RibbonGroupRegistry` is a separate class from `ViewRegistry` for exactly this reason: a missing
 content view is a defect and throws, while a missing ribbon group is the normal answer and comes
 back empty. One class with two lookups behaving oppositely on a miss would read worse than two.
@@ -279,6 +287,34 @@ nothing on its own controls, it is collectable, and the symptom is silence.
 ribbon group failing during shell construction would put an alert on screen before there is a window
 to own it — and `FxmlSmokeTest` loads every one of these files through the real factory, so a broken
 group fails the build instead.
+
+### The Global group, and the opacity slider it replaced
+
+The third fixed slot holds the settings that belong to no mode: **Blast Port**, **Single Message**
+and **Byte Hijack**. It was called Appearance and its only control was a content-opacity slider.
+
+**Opacity was removed, not moved.** It was a view control rather than a setting — adjusted while
+looking at something, reset by the button beside it, deliberately excluded from persistence — and it
+was the only one in the application. There was no second home for it, and keeping it alongside three
+real settings under a heading that no longer described any of them would have been worse than either
+option. The group is called Global now because that is what the three have in common; "Appearance"
+would have been a name that fitted nothing in it.
+
+**All three are also in Preferences' General tab.** Neither surface owns the value; both read and
+write `AppState`, and each control follows the property as well as writing to it. That last half is
+what opacity never needed, because it had one surface: with two, a control that read `AppState` once
+would sit there disagreeing with it the moment the other one changed anything. Setting a JavaFX
+control to the value it already holds fires nothing, so each write-back loop closes itself and none
+of these needs a re-entrancy flag — unlike the log-scaled slider below, whose round trip does not
+land where it started.
+
+**The port spinner is configured by `ui.PortSpinner`, not by each controller.** A port spinner needs
+three things that are each easy to omit and invisible when they are: bounds from
+`PortTailMapping`'s range, so a control cannot offer a value the store would reject on the next
+launch; a converter that keeps the current value rather than throwing a `NumberFormatException` out
+of a focus listener into a console the windowed build does not have; and an `increment(0)` on focus
+loss, without which a typed port is discarded when the user tabs away or presses Close. Two copies
+of that would be two chances for one surface to accept what the other refuses.
 
 ### The log-scaled slider
 
@@ -380,18 +416,24 @@ does not exist yet is a control nobody is testing against a threat nobody curren
 
 ## 8a. Settings persistence
 
-Everything survives a restart except `contentOpacity`, which is a view control with a Reset button
-beside it — restoring a half-transparent window would look like a rendering fault.
+Everything survives a restart. Nothing is excluded any more: `contentOpacity` was the one exception,
+and it no longer exists (§4, §6).
 
 | Scope | Setting | Default |
 |---|---|---|
 | global | selected mode | `LOG` |
 | global | theme | `LIGHT` |
+| global | blast port (1–65535) | `8081` |
+| global | single message | `false` |
+| global | byte hijack | `false` |
 | Log | playback speed factor (× real time, 0.1–10.0) | `1.0` |
 | Log | log folder | none |
 | Log | port → tail number mappings | empty |
 | Message | message type | `MESSAGE_1` |
-| SOAP | port | `8081` |
+| SOAP | IP address (IPv4 dotted quad) | `127.0.0.1` |
+| SOAP | message type | `TYPE_1` |
+| SOAP | data files | empty |
+| SOAP | tail number | none |
 
 **The selected mode persists, and used not to.** The template excluded its `currentViewId` and said
 why: the four views were placeholders, and restoring one was not behaviour a template should model.
@@ -399,12 +441,22 @@ The views are modes now, so the reason expired and the exclusion reversed. The J
 explained the old choice was rewritten rather than left to contradict the code.
 
 **`Settings` is a record of per-mode records** — `LogSettings`, `MessageSettings`, `SoapSettings` —
-mirroring the file's key namespaces and the Preferences tabs that are coming. A flat record would be
-a widening list of unrelated scalars whose only clue to what belongs where is a name prefix.
+mirroring the file's key namespaces and the Preferences tabs. A flat record would be a widening list
+of unrelated scalars whose only clue to what belongs where is a name prefix.
+
+**The global settings are components of `Settings` itself, not a fourth nested record.** Being
+unprefixed *is* what says a setting belongs to no mode, which was already true of `mode` and `theme`
+before there were any others; a `global.*` namespace would have made that true of three keys and
+false of the two beside them. `LogSettings` groups a folder, a speed and a table because they have
+nothing in common but their mode — five unrelated global scalars have nothing in common at all, and
+a holder for them would be a box rather than a grouping.
 
 `LogSettings` copies its mapping list into an unmodifiable, port-ordered one in its constructor
-rather than trusting callers. `Settings` is handed to a background writer thread on the strength of
-being immutable, and a record wrapping a mutable `List` is not immutable however its accessors read.
+rather than trusting callers, and `SoapSettings` does the same with its data file paths — dropping
+blanks and repeats rather than rejecting them, since a file picked twice from a chooser is a person
+using a chooser, not an error worth failing a settings write over. `Settings` is handed to a
+background writer thread on the strength of being immutable, and a record wrapping a mutable `List`
+is not immutable however its accessors read.
 
 **`Settings.from` reads `AppState` directly, on the FX thread** — where its only caller, a change
 listener, already runs. It took an `AppState.Snapshot` once and was changed away from it because the
@@ -412,11 +464,34 @@ theme was deliberately not in that record; now that the record is gone entirely 
 properties directly is the only path, and the immutable `Settings` it produces is what crosses to
 the writer thread.
 
-**`8081` is the SOAP default** because the removed HTTP layer bound `8080` and defaulting the two to
-the same port would have made the out-of-box state a port conflict. The conflict it avoided no
-longer exists, but the default stands: it is a stored value in files that already exist, and
-changing it now would move a configured port under someone for no benefit. `8080` also remains the
-likeliest port for whatever else is running on a developer's machine.
+**`8081` is the Blast Port default**, inherited from the SOAP listen port it outlived. The original
+reason was that the removed HTTP layer bound `8080`; that conflict is gone, but `8080` remains the
+likeliest port for whatever else is already running, and the value is stored in files that exist, so
+moving it now would relocate a configured port under someone for no benefit.
+
+**SOAP's port became an address, which is a re-specification rather than a rename.** SOAP mode
+sends; it does not listen. A listen port was a setting shaped like a question the mode does not ask,
+and no amount of validation would have made it the right one. `soap.port` is therefore an unknown
+key now, not a migrated one — the per-key tolerant read means an existing file simply loses a value
+that meant nothing, rather than restoring a port into a field that would have had to reinterpret it.
+
+**`127.0.0.1` is the SOAP default** because a mode with no behaviour should default to the address
+that cannot reach anything, in case the behaviour arrives before anyone revisits the line.
+
+**The address rule is IPv4 dotted-quad, and the octets are parsed rather than counted.** `999.1.1.1`
+matches four dot-separated digit runs and is not an address; `010.1.1.1` is ten to this parser and
+eight to some resolvers, so it is refused for the reason `log.mapping.080` is a collision rather
+than a second spelling. Hostnames are out because a hostname pattern accepts very nearly any string,
+which is the point at which a validator stops catching typos; IPv6 is out because it is validation
+surface for a mode with no behaviour. Both are a widened pattern plus a test if they turn up, which
+is a smaller change than narrowing a rule people have already stored values against.
+
+**The tail rule moved to `TailNumber` and `PortTailMapping` delegates to it.** SOAP's tail is
+specified as having the same constraints as a mapping's, and "the same constraints" only stays true
+with one implementation of them. Two copies of a six-character pattern would be a validator and a
+table that eventually disagreed about whether `N123` is a tail. SOAP's tail differs in exactly one
+way, and it is deliberate: it may be absent. A mapping without a tail is not a mapping; a run with
+no tail configured is an ordinary state, and the same one the log folder starts in.
 
 Three pieces, split so the fragile part is testable on its own:
 
@@ -532,15 +607,37 @@ the one that matters ineffective. So the Log tab confirms only when the table is
 prompt goes through `DialogService.confirm`, not an inline `Alert`: an `Alert` built at the call
 site gets neither owner nor stylesheet, and opens in stock light chrome under the dark theme.
 
-**Two surfaces, one value.** The log folder, the playback speed and the message type each appear in
-both Preferences and the ribbon. None of them holds a copy — all read and write `AppState`, and the
-read-outs are *bound* rather than assigned, so they track it without being rebuilt.
+**Two surfaces, one value.** The log folder, the playback speed, the message type and the three
+global settings each appear in both Preferences and the ribbon. None of them holds a copy — all read
+and write `AppState`, and the read-outs are *bound* rather than assigned, so they track it without
+being rebuilt.
+
+**The General tab's Reset covers four settings and still does not ask.** None of them destroys
+anything typed at length: a theme and two check boxes are instantly visible and instantly undone,
+and a port is one number. Its disabled-when-nothing-to-reset condition is a single
+`createBooleanBinding` over the four properties rather than a chain of `isEqualTo(...).and(...)`,
+because `BooleanExpression.isEqualTo` takes another observable rather than a literal — the check
+boxes would have had to be written as `not()`, which reads as "is off" and is only equivalent to "is
+default" while the default happens to be `false`.
+
+**The SOAP tab is the only surface for any of its four settings**, and two of them validate at
+entry. The address and the tail commit on Enter and on focus loss — a `TextField` has no editor to
+flush the way a `Spinner` does, but it has the same failure, where typing a value and pressing Close
+discards it. Both funnel through a commit method that catches the validator's
+`IllegalArgumentException` and shows its message verbatim beside the field, and a rejected entry
+leaves the text as the user typed it, because snapping it back to the stored value would erase what
+they were correcting. Its Reset confirms only when the data file list is non-empty, for the same
+reason the Log tab's does.
 
 ### The mode views
 
 Each mode's content view names it and shows that mode's live configuration read-only: Log its
-folder, speed and mapping count; Message its type; SOAP its port. REST shows none, because it has
-none.
+folder, speed and mapping count; Message its type; SOAP its address, message type, data file count
+and tail. REST shows none, because it has none.
+
+SOAP's data files are a count rather than a list, the way Log's mappings are. These views are a
+read-out of how a mode is configured; the place to see and change the list itself is the one place
+that can change it.
 
 **Read-only on purpose.** Every value is already editable in the ribbon or in Preferences. A third
 editing surface would be a third thing to keep in step; a read-out is not — and being *bound* rather
@@ -583,11 +680,18 @@ to be read by a person, which is why they are shown verbatim rather than rewritt
 rejected edit also calls `refresh()`, because the cell has already accepted the text visually and
 redrawing from the items list is what puts the old value back in front of the user.
 
-**The SOAP-port collision is a warning, not a block.** Nothing binds either port yet and the two
+**The Blast Port collision is a warning, not a block.** Nothing binds either port yet and the two
 settings are independent, so refusing the entry would be inventing a rule — but the conflict it
-predicts would surface much later, at bind time, in a different mode, with nothing pointing back
-here. The notice names the port in text; the `-jfx-warning-text` colour is a secondary signal only,
-since a reader who cannot distinguish it from a hint must still get the message.
+predicts would surface much later, at bind time, with nothing pointing back here. The notice names
+the port in text; the `-jfx-warning-text` colour is a secondary signal only, since a reader who
+cannot distinguish it from a hint must still get the message.
+
+It compared against SOAP's listen port until that port became an address. The notice moved to the
+Blast Port rather than being deleted, because the reason it was worth raising did not change with
+which port it names — but it did acquire a subscription it never needed before. The SOAP port lived
+on a sibling tab of the same modal dialog and could not move while the Log tab was on screen; the
+Blast Port is in the ribbon, so it can. A warning about a port that is no longer the Blast Port is
+worse than no warning at all, so the tab listens to the property as well as to the table.
 
 ### Theming
 
@@ -634,6 +738,9 @@ with a leading byte-order mark skipped.
 ```properties
 mode=log
 theme=dark
+blastPort=8081
+singleMessage=false
+byteHijack=false
 
 log.playbackSpeedFactor=1.5
 log.folder=C:\\logs\\capture
@@ -643,7 +750,11 @@ log.mapping.5003=123456
 
 message.type=MESSAGE_2
 
-soap.port=8081
+soap.ip=127.0.0.1
+soap.messageType=TYPE_1
+soap.tail=N54321
+soap.dataFile.0=C:\\data\\one.bin
+soap.dataFile.1=C:\\data\\two.bin
 ```
 
 `java.util.prefs.Preferences` was the alternative and is rejected on purpose: on Windows it writes
@@ -655,9 +766,21 @@ dots in it, and reading the mapping set means filtering `stringPropertyNames()` 
 than calling a fixed getter. That is a different read shape from the rest of the file and has its
 own tests.
 
-**`theme` keeps its unprefixed key** — along with `mode`, it is not mode-scoped. `simFactor` and
-`logFolder` moved under `log.` and their old spellings are simply unknown keys, which the store
-already ignores.
+**Unprefixed is the global namespace**, not an absence of one: `mode`, `theme`, `blastPort`,
+`singleMessage` and `byteHijack` are not mode-scoped. `simFactor` and `logFolder` moved under `log.`
+and their old spellings are simply unknown keys, which the store already ignores; `soap.port` joined
+them when SOAP's port became an address.
+
+**`soap.dataFile.<index>` is indexed for a different reason than `log.mapping.<port>` is keyed.** A
+port is the mapping's identity, so making it the key buys port uniqueness from the file format for
+free. A file list has no such key; the index exists only to make the order reproducible, so it is
+read as a sort key rather than a slot. Gaps and odd numbering in a hand-edited file are therefore
+harmless, and a repeated path is dropped with a log line rather than stored twice.
+
+**Booleans are parsed explicitly, not with `Boolean.parseBoolean`.** That method reads every value
+that is not `"true"` as `false`, so a typo, a stray word or an accidentally blanked line would all
+silently mean "off" — indistinguishable from someone having turned the setting off, with nothing
+logged. An unreadable flag falls back to its default and says so, like every other value here.
 
 **Old keys are not migrated, deliberately.** The version is unreleased and single-user, so a missing
 key falling back silently is the whole migration story the per-key tolerant read already implements.
@@ -672,26 +795,27 @@ back as its default while the log folder on the next line restored perfectly.
 
 ## 9. Testing
 
-245 tests, no display required. Run on Linux and Windows for every push — see §10.
+342 tests, no display required. Run on Linux and Windows for every push — see §10.
 
 | Suite | Covers | Toolkit |
 |---|---|---|
 | `AppStateTest` | The documented defaults, the off-thread rejection contract, and — by reflection — that the accessors stay read-only and that no off-thread read projection has crept back. Plus the collection's own versions of those rules: the mapping mutators are guarded, the handed-out list is unmodifiable, and an edit is one change event | no |
 | `PortTailMappingTest` | The tail format, the port range, and uniqueness in both directions — including that two tails differing only in case collide rather than both being accepted | no |
-| `StoredEnumParsingTest` | The tolerant-parse contract `Theme`, `Mode` and `MessageType` share: every constant round-trips, unknown values fall back rather than throwing, and the stored form is not the shown form | no |
+| `StoredEnumParsingTest` | The tolerant-parse contract `Theme`, `Mode`, `MessageType` and `SoapMessageType` share: every constant round-trips, unknown values fall back rather than throwing, the stored form is not the shown form, and the two message-type enums do not answer for each other | no |
+| `IpAddressTest` | The address rule itself: which strings are addresses, and — the half a shape-only pattern gets wrong — which of the strings that *look* like addresses are not. Pins hostnames and IPv6 as deliberately out of scope | no |
 | `ViewRegistryTest` | That every `Mode` resolves to a view, that no two share one, and the miss message | no |
 | `RibbonGroupRegistryTest` | That only Log and Message carry a contextual group, that a mode without one gets an empty `Optional` rather than a throw, and that every registered group is actually on the classpath | no |
 | `LogScaleTest` | The log-track arithmetic: real time at mid-track, halving and doubling covering equal travel, round-trips, and that no rounded value falls outside what the store accepts | no |
-| `ModeViewTest` | That every mode resolves to a view naming it, that the Log, Message and SOAP views show that mode's configuration **live**, that REST says plainly it is not implemented, and that no view styles itself with an inline literal the theme cannot reach | **yes** |
+| `ModeViewTest` | That every mode resolves to a view naming it, that the Log, Message and SOAP views show that mode's whole configuration **live**, that REST says plainly it is not implemented, and that no view styles itself with an inline literal the theme cannot reach | **yes** |
 | `ContextualRibbonTest` | That the ribbon follows the mode: the right group for the mode already selected when the slot is built, a swap on change, and an empty *unmanaged* slot for SOAP and REST | **yes** |
 | `SpringContextTest` | That the context starts, that every controller under `controller` is prototype-scoped, and that the shared services are not | no |
 | `ModeGroupViewIdTest` | That every `userData` in the ribbon names a real `Mode`, that every `Mode` has a toggle, that each resolves through `ViewRegistry`, and that the toggle marked selected is the default mode — read from the FXML as XML | no |
 | `FxmlSmokeTest` | That all sixteen FXML files load through the real Spring-backed controller factory | **yes** |
-| `SettingsStoreTest` | The tolerance rules, against hand-written files: missing, corrupt, out of range, BOM-prefixed, non-ASCII, plus the mapping table entry by entry (bad port, bad tail, duplicate tail, a port spelled two ways) and that the template's keys are unknown keys | no |
-| `SettingsServiceTest` | Restore of every mode's settings, coalesced writes, the shutdown flush, that binding does not write back what it just read, and that a mapping edit persists at all | no |
+| `SettingsStoreTest` | The tolerance rules, against hand-written files: missing, corrupt, out of range, BOM-prefixed, non-ASCII, plus the mapping table and the data file list entry by entry (bad port, bad tail, duplicate tail, a port spelled two ways; a bad index, a blank path, a repeat), that a flag falls back rather than quietly reading as off, and that the template's keys are unknown keys | no |
+| `SettingsServiceTest` | Restore of every setting global and mode-scoped, coalesced writes, the shutdown flush, that binding does not write back what it just read, that both list edits persist at all, and that the three settings which replaced opacity reach the file | no |
 | `SettingsRestoreOrderTest` | That restoring *before* the controls are built is what puts stored values on them — including the negative case. Its subjects are the Preferences spinner and the Mode ribbon group, both of which read `AppState` once in `initialize()` | **yes** |
-| `PreferencesSurfaceTest` | Tab by tab: that each reads live state and writes through it rather than holding a copy, that the log folder and message type track across both surfaces without a reopen, that the spinners' bounds come from the model's constants, that a tab's Reset touches only its own settings, and that the dialog has one tab per scope and none for REST | **yes** |
-| `MappingTableTest` | A4: that the editor adds, edits and removes mappings, and rejects a malformed port or tail, an out-of-range port and a duplicate in either direction **at entry with the reason visible** — the half of the rules that lives in the UI and that `PortTailMappingTest` cannot reach. Plus the non-blocking SOAP-port collision notice | **yes** |
+| `PreferencesSurfaceTest` | Tab by tab: that each reads live state and writes through it rather than holding a copy, that the log folder, message type and the three global settings track across both surfaces without a reopen, that the spinners' bounds come from the model's constants, that a tab's Reset touches only its own settings, that the SOAP tab refuses a malformed address or tail at entry with the reason visible, and that the dialog has one tab per scope and none for REST. Plus what is deliberately absent: the opacity slider from every surface, and the SOAP listen port | **yes** |
+| `MappingTableTest` | A4: that the editor adds, edits and removes mappings, and rejects a malformed port or tail, an out-of-range port and a duplicate in either direction **at entry with the reason visible** — the half of the rules that lives in the UI and that `PortTailMappingTest` cannot reach. Plus the non-blocking Blast Port collision notice | **yes** |
 | `ThemeContrastTest` | Every on-screen colour pair in **both** themes, parsed from `ribbon.css`, against 4.5:1 for text and 3:1 for focus indicators | no |
 | `ThemeSwitchingTest` | That switching restyles windows that are **already open**, not only the next one created | **yes** |
 

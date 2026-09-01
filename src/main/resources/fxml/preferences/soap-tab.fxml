@@ -2,38 +2,80 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
-<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
 <!--
-  The SOAP tab: the port the mode will listen on.
+  The SOAP tab: the address, the message type, the data files and the tail number.
 
-  It has no ribbon group. A listen port is set once and then forgotten, and a ribbon is for controls
-  reached for repeatedly, so putting it there would have meant a set-once value one mis-click from
-  every session.
+  It replaced a listen port. SOAP mode sends rather than listens, so the setting it needed was a
+  destination, not a bind - and a port that nothing could ever bind was a setting shaped like a
+  question the mode does not ask.
 
-  The port is validated for range and never checked for availability. Whether it is free is a
-  bind-time question, and the mode behaviour that would bind it does not exist yet.
+  SOAP has no ribbon group, so this is the only place any of these can be changed. That is
+  deliberate: they are set once for a run and a ribbon is for controls reached for repeatedly.
+
+  The address is validated for form and never checked for reachability; the data files are not
+  checked for existence. Both are connect-time and read-time questions, and the behaviour that would
+  ask them does not exist yet.
+
+  Bad entries are rejected where they are made, with the reason shown beside the control - the same
+  rule the mapping table follows, and the same messages, straight from the validators.
 -->
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
       fx:controller="com.culberth.tools.datablaster.controller.preferences.SoapTabController"
-      spacing="14">
+      spacing="12">
     <padding>
         <Insets top="14" right="14" bottom="14" left="14"/>
     </padding>
 
     <VBox spacing="4">
-        <Label fx:id="portCaption" text="_Port" mnemonicParsing="true"
+        <Label fx:id="ipCaption" text="SOAP _IP" mnemonicParsing="true"
                styleClass="dialog-field-label"/>
-        <Spinner fx:id="portSpinner" editable="true" prefWidth="120"
-                 accessibleText="SOAP listen port"/>
-        <Label text="1 to 65535. Not checked for availability: that is a bind-time question, and
-                     nothing binds it yet."
+        <TextField fx:id="ipField" prefWidth="180" accessibleText="SOAP IP address"/>
+        <Label text="An IPv4 address, such as 127.0.0.1. Not checked for reachability: that is a
+                     connect-time question, and nothing connects yet."
                styleClass="dialog-hint" wrapText="true"/>
+        <Label fx:id="ipErrorLabel" styleClass="dialog-warning" wrapText="true" managed="false"
+               visible="false"/>
+    </VBox>
+
+    <VBox spacing="4">
+        <Label fx:id="messageTypeCaption" text="SOAP Message _Type" mnemonicParsing="true"
+               styleClass="dialog-field-label"/>
+        <ChoiceBox fx:id="soapMessageTypeChoice" accessibleText="SOAP message type" prefWidth="140"/>
+    </VBox>
+
+    <Separator/>
+
+    <Label fx:id="dataFilesCaption" text="Data Files" styleClass="dialog-field-label"/>
+    <ListView fx:id="dataFileList" styleClass="data-file-list" prefHeight="120" VBox.vgrow="ALWAYS"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Button fx:id="addFilesButton" text="_Add…" mnemonicParsing="true"
+                onAction="#onAddDataFiles" accessibleText="Add data files"/>
+        <Button fx:id="removeFileButton" text="Re_move" mnemonicParsing="true"
+                onAction="#onRemoveDataFile" accessibleText="Remove the selected data file"/>
+        <Label text="Order is the order you chose them in." styleClass="dialog-hint"/>
+    </HBox>
+
+    <Separator/>
+
+    <VBox spacing="4">
+        <Label fx:id="tailCaption" text="Tail _Number" mnemonicParsing="true"
+               styleClass="dialog-field-label"/>
+        <TextField fx:id="tailField" prefWidth="140" accessibleText="SOAP tail number"/>
+        <Label text="Exactly six letters or digits, or empty for none — the same rule the Log tab's
+                     mapping table applies."
+               styleClass="dialog-hint" wrapText="true"/>
+        <Label fx:id="tailErrorLabel" styleClass="dialog-warning" wrapText="true" managed="false"
+               visible="false"/>
     </VBox>
 
     <Region VBox.vgrow="ALWAYS"/>
@@ -42,5 +84,6 @@
         <Button fx:id="resetButton" text="_Reset this tab" mnemonicParsing="true"
                 onAction="#onResetToDefaults"
                 accessibleText="Reset the SOAP settings to their defaults"/>
+        <Label text="Clears the data files; asks first." styleClass="dialog-hint"/>
     </HBox>
 </VBox>

@@ -2,15 +2,22 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.Spinner?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
 <!--
   The General tab: the settings that belong to no mode, plus where they all live on disk.
+
+  Blast Port, Single Message and Byte Hijack are also in the Global ribbon group. Neither surface
+  owns the value; both read and write AppState. The ribbon is for reaching them quickly, this tab is
+  for typing an exact port and for finding them at all - a persisted setting with no entry in the
+  settings dialog is a setting nobody knows exists.
 
   The settings file path is here rather than tucked under a mode, because it answers "where did my
   setting go" for every tab at once. The store is a plain properties file precisely so that path is
@@ -34,6 +41,25 @@
 
     <Separator/>
 
+    <VBox spacing="4">
+        <Label fx:id="blastPortCaption" text="_Blast Port" mnemonicParsing="true"
+               styleClass="dialog-field-label"/>
+        <Spinner fx:id="blastPortSpinner" editable="true" prefWidth="120"
+                 accessibleText="Blast port"/>
+        <Label text="1 to 65535. Not checked for availability: that is a bind-time question, and
+                     nothing binds it yet."
+               styleClass="dialog-hint" wrapText="true"/>
+    </VBox>
+
+    <VBox spacing="6">
+        <CheckBox fx:id="singleMessageCheck" text="_Single Message" mnemonicParsing="true"
+                  accessibleText="Send a single message only"/>
+        <CheckBox fx:id="byteHijackCheck" text="Byte _Hijack" mnemonicParsing="true"
+                  accessibleText="Hijack the outgoing bytes"/>
+    </VBox>
+
+    <Separator/>
+
     <VBox spacing="2">
         <Label text="Settings file" styleClass="dialog-field-label"/>
         <Label fx:id="settingsFileLabel" styleClass="dialog-hint" wrapText="true" maxWidth="460"/>
@@ -47,6 +73,6 @@
         <Button fx:id="resetButton" text="_Reset this tab" mnemonicParsing="true"
                 onAction="#onResetToDefaults"
                 accessibleText="Reset the general settings to their defaults"/>
-        <Label text="Affects the theme only." styleClass="dialog-hint"/>
+        <Label text="Affects the theme and the three settings above." styleClass="dialog-hint"/>
     </HBox>
 </VBox>

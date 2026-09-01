@@ -56,23 +56,34 @@ class SettingsServiceTest {
     @Test
     @DisplayName("stored values are in AppState before anything reads it")
     void storedValuesAreInAppStateBeforeAnythingReadsIt() {
+        String dataFile = directory.resolve("capture.bin").toString();
         store.write(new Settings(
                 Mode.SOAP,
                 Theme.DARK,
+                9443,
+                true,
+                true,
                 new Settings.LogSettings(3.5, directory.toString(),
                         List.of(PortTailMapping.of(5001, "N12345"))),
                 new Settings.MessageSettings(MessageType.MESSAGE_3),
-                new Settings.SoapSettings(9443)));
+                new Settings.SoapSettings("10.20.30.40", SoapMessageType.TYPE_3,
+                        List.of(dataFile), "N54321")));
 
         service.bind(appState);
 
         assertSame(Mode.SOAP, appState.getCurrentMode());
         assertSame(Theme.DARK, appState.getTheme());
+        assertEquals(9443, appState.getBlastPort());
+        assertTrue(appState.isSingleMessage());
+        assertTrue(appState.isByteHijack());
         assertEquals(3.5, appState.getPlaybackSpeedFactor(), 0.0001);
         assertEquals(directory.toString(), appState.getLogFolder().getPath());
         assertEquals(List.of(PortTailMapping.of(5001, "N12345")), appState.portTailMappings());
         assertSame(MessageType.MESSAGE_3, appState.getMessageType());
-        assertEquals(9443, appState.getSoapPort());
+        assertEquals("10.20.30.40", appState.getSoapIp());
+        assertSame(SoapMessageType.TYPE_3, appState.getSoapMessageType());
+        assertEquals(List.of(new File(dataFile)), appState.soapDataFiles());
+        assertEquals("N54321", appState.getSoapTail());
     }
 
     @Test
@@ -84,6 +95,8 @@ class SettingsServiceTest {
         assertEquals(Settings.PLAYBACK_SPEED_DEFAULT, appState.getPlaybackSpeedFactor(), 0.0001);
         assertNull(appState.getLogFolder());
         assertTrue(appState.portTailMappings().isEmpty());
+        assertTrue(appState.soapDataFiles().isEmpty());
+        assertNull(appState.getSoapTail());
         // The restore must not look like a user edit. If bind() subscribed before applying, every
         // launch would write the file straight back — churn that is invisible until someone
         // watches the file's timestamp and wonders what is touching it.
@@ -171,14 +184,22 @@ class SettingsServiceTest {
     }
 
     @Test
-    @DisplayName("every mode's settings survive a restart")
-    void everyModesSettingsSurviveARestart() {
+    @DisplayName("every setting, global and mode-scoped, survives a restart")
+    void everySettingSurvivesARestart() {
+        File dataFile = new File(directory.toFile(), "capture.bin");
+
         service.bind(appState);
         appState.setCurrentMode(Mode.MESSAGE);
         appState.setTheme(Theme.DARK);
+        appState.setBlastPort(9443);
+        appState.setSingleMessage(true);
+        appState.setByteHijack(true);
         appState.setPlaybackSpeedFactor(0.5);
         appState.setMessageType(MessageType.MESSAGE_2);
-        appState.setSoapPort(9443);
+        appState.setSoapIp("10.20.30.40");
+        appState.setSoapMessageType(SoapMessageType.TYPE_3);
+        appState.setSoapDataFiles(List.of(dataFile));
+        appState.setSoapTail("N54321");
         appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
         service.flushOnShutdown();
 
@@ -188,10 +209,37 @@ class SettingsServiceTest {
 
         assertSame(Mode.MESSAGE, relaunched.getCurrentMode());
         assertSame(Theme.DARK, relaunched.getTheme());
+        assertEquals(9443, relaunched.getBlastPort());
+        assertTrue(relaunched.isSingleMessage());
+        assertTrue(relaunched.isByteHijack());
         assertEquals(0.5, relaunched.getPlaybackSpeedFactor(), 0.0001);
         assertSame(MessageType.MESSAGE_2, relaunched.getMessageType());
-        assertEquals(9443, relaunched.getSoapPort());
+        assertEquals("10.20.30.40", relaunched.getSoapIp());
+        assertSame(SoapMessageType.TYPE_3, relaunched.getSoapMessageType());
+        assertEquals(List.of(dataFile.getAbsoluteFile()), relaunched.soapDataFiles());
+        assertEquals("N54321", relaunched.getSoapTail());
         assertEquals(List.of(PortTailMapping.of(5001, "N12345")), relaunched.portTailMappings());
+    }
+
+    /**
+     * The data file list is the second collection, and it needs the second
+     * {@code ListChangeListener} for the reason the mapping table needed the first: a
+     * {@code ChangeListener} on an {@code ObservableList} never fires, so the edits would persist
+     * silently nowhere - no exception, no log line, just a list that is empty again next launch.
+     */
+    @Test
+    @DisplayName("editing the data file list persists it")
+    void editingTheDataFileListPersistsIt() {
+        File first = new File(directory.toFile(), "one.bin");
+        File second = new File(directory.toFile(), "two.bin");
+
+        service.bind(appState);
+        appState.addSoapDataFiles(List.of(first, second));
+        appState.removeSoapDataFile(first);
+        service.flushOnShutdown();
+
+        assertEquals(List.of(second.getAbsolutePath()), store.read().soap().dataFilePaths(),
+                "a collection needs a ListChangeListener; a ChangeListener on it never fires");
     }
 
     /**
@@ -213,22 +261,25 @@ class SettingsServiceTest {
     }
 
     /**
-     * Deliberate scope. Opacity is a view control reset by the button beside it — see
-     * {@link Settings}. The selected mode, which the template deliberately did not persist, now
-     * does; that half is covered by {@link #everyModesSettingsSurviveARestart()}.
+     * The three global settings replaced a content-opacity slider that was deliberately not
+     * persisted, so the rule they are held to is the opposite of the one it was: they must reach
+     * the file. This is the check that swapping a view control for real settings actually made
+     * them settings, rather than leaving three controls that forget themselves on every launch.
      */
     @Test
-    @DisplayName("opacity is not persisted")
-    void opacityIsNotPersisted() throws IOException {
+    @DisplayName("the global settings reach the file, unlike the opacity they replaced")
+    void theGlobalSettingsReachTheFile() throws IOException {
         service.bind(appState);
 
-        appState.setContentOpacity(0.4);
+        appState.setBlastPort(9443);
+        appState.setSingleMessage(true);
+        appState.setByteHijack(true);
         service.flushOnShutdown();
 
-        if (Files.exists(file)) {
-            String contents = Files.readString(file);
-            assertFalse(contents.contains("0.4"), "opacity must not reach the file: " + contents);
-        }
+        String contents = Files.readString(file);
+        assertTrue(contents.contains("blastPort=9443"), contents);
+        assertTrue(contents.contains("singleMessage=true"), contents);
+        assertTrue(contents.contains("byteHijack=true"), contents);
     }
 
     @Test
@@ -279,6 +330,7 @@ class SettingsServiceTest {
         appState.setPlaybackSpeedFactor(1.0);
         appState.setCurrentMode(Mode.REST);
         appState.addPortTailMapping(PortTailMapping.of(5001, "N12345"));
+        appState.addSoapDataFiles(List.of(new File(directory.toFile(), "late.bin")));
 
         assertTrue(true, "changing values after shutdown did not throw");
     }

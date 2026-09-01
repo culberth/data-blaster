@@ -66,7 +66,7 @@
                               include here like the fixed groups either side of it.
                             -->
                             <fx:include source="ribbon/contextual-group.fxml"/>
-                            <fx:include source="ribbon/appearance-group.fxml"/>
+                            <fx:include source="ribbon/global-group.fxml"/>
                         </HBox>
                     </ScrollPane>
                 </Tab>

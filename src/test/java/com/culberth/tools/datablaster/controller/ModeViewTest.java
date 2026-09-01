@@ -12,6 +12,7 @@ import com.culberth.tools.datablaster.model.MessageType;
 import com.culberth.tools.datablaster.model.Mode;
 import com.culberth.tools.datablaster.model.PortTailMapping;
 import com.culberth.tools.datablaster.model.Settings;
+import com.culberth.tools.datablaster.model.SoapMessageType;
 import com.culberth.tools.datablaster.ui.ViewRegistry;
 import java.io.File;
 import java.util.List;
@@ -58,7 +59,10 @@ class ModeViewTest {
             appState.setPlaybackSpeedFactor(Settings.PLAYBACK_SPEED_DEFAULT);
             appState.setPortTailMappings(List.of());
             appState.setMessageType(Settings.DEFAULTS.message().type());
-            appState.setSoapPort(Settings.DEFAULTS.soap().port());
+            appState.setSoapIp(Settings.DEFAULTS.soap().ip());
+            appState.setSoapMessageType(Settings.DEFAULTS.soap().type());
+            appState.setSoapDataFiles(List.of());
+            appState.setSoapTail(Settings.DEFAULTS.soap().tail());
         });
     }
 
@@ -133,15 +137,29 @@ class ModeViewTest {
     }
 
     @Test
-    @DisplayName("the SOAP view shows the configured port, live")
-    void theSoapViewShowsThePort() {
+    @DisplayName("the SOAP view shows its whole configuration, live")
+    void theSoapViewShowsItsConfigurationLive() {
         HeadlessToolkit.onFxThread(() -> {
             Parent view = viewFor(Mode.SOAP);
-            assertEquals("8081", textOf(view, "portValue"));
+            assertEquals("127.0.0.1", textOf(view, "ipValue"));
+            assertEquals("none", textOf(view, "dataFileCountValue"));
+            assertEquals("(none set)", textOf(view, "tailValue"));
 
-            appState.setSoapPort(9443);
+            appState.setSoapIp("10.20.30.40");
+            appState.setSoapMessageType(SoapMessageType.TYPE_3);
+            appState.setSoapTail("N54321");
+            appState.addSoapDataFiles(List.of(new File("one.bin")));
 
-            assertEquals("9443", textOf(view, "portValue"));
+            // Bound, not assigned: the view was built before any of these were set.
+            assertEquals("10.20.30.40", textOf(view, "ipValue"));
+            assertEquals(SoapMessageType.TYPE_3.toString(), textOf(view, "messageTypeValue"),
+                    "three surfaces render this enum; they must agree on what it is called");
+            assertEquals("1 file", textOf(view, "dataFileCountValue"));
+            assertEquals("N54321", textOf(view, "tailValue"));
+
+            appState.addSoapDataFiles(List.of(new File("two.bin")));
+            assertEquals("2 files", textOf(view, "dataFileCountValue"),
+                    "the count follows the collection, which a ChangeListener would not");
         });
     }
 

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  The "Global" ribbon group: the settings that belong to no mode.
+
+  It was "Appearance", and held a content-opacity slider. Opacity was a view control rather than a
+  setting - adjusted while looking at something, reset by the button beside it, deliberately not
+  persisted - and it is gone rather than moved: nothing else in the application is a view control,
+  so there was no second home for it. What replaces it is three real settings, which is why the
+  group is no longer called Appearance: none of them affects how anything looks.
+
+  These three are also in Preferences' General tab. Neither surface owns the value; both read and
+  write AppState. The ribbon is for the ones reached for between runs, which is what all three are.
+
+  The template's Sim Factor slider used to live here too. It became Log mode's Playback Speed
+  Factor, which is a mode setting and sits in the Log group and the Log tab.
+-->
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.culberth.tools.datablaster.controller.ribbon.GlobalGroupController"
+      styleClass="ribbon-group">
+
+    <HBox styleClass="ribbon-group-buttons" spacing="14" alignment="CENTER_LEFT">
+        <VBox alignment="CENTER_LEFT" spacing="2">
+            <Label fx:id="blastPortCaption" text="Blast Port" styleClass="ribbon-slider-label"/>
+            <Spinner fx:id="blastPortSpinner" editable="true" prefWidth="90"
+                     accessibleText="Blast port"/>
+        </VBox>
+        <VBox alignment="CENTER_LEFT" spacing="4">
+            <CheckBox fx:id="singleMessageCheck" text="Single Message"
+                      styleClass="ribbon-check"
+                      accessibleText="Send a single message only"/>
+            <CheckBox fx:id="byteHijackCheck" text="Byte Hijack"
+                      styleClass="ribbon-check"
+                      accessibleText="Hijack the outgoing bytes"/>
+        </VBox>
+    </HBox>
+    <Label text="Global" styleClass="ribbon-group-title"/>
+</VBox>
