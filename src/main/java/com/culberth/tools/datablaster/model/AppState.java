@@ -25,75 +25,76 @@ import javafx.collections.ObservableList;
 import org.springframework.stereotype.Component;
 
 /**
- * Application-wide UI state, held apart from any controller so that several controllers (and the
- * web layer) can share it without depending on each other.
+ * Application-wide UI state, held apart from any controller so that several controllers (and the web layer) can share
+ * it without depending on each other.
  *
- * <p><strong>Threading.</strong> This state belongs to the JavaFX Application Thread. The
- * mutators enforce that and throw if called from anywhere else; the property accessors are
- * read-only so there is no second, unguarded way in. Code running off the FX thread writes through
- * {@link #onFxThread(Runnable)}.
+ * <p>
+ * <strong>Threading.</strong> This state belongs to the JavaFX Application Thread. The mutators enforce that and throw
+ * if called from anywhere else; the property accessors are read-only so there is no second, unguarded way in. Code
+ * running off the FX thread writes through {@link #onFxThread(Runnable)}.
  *
- * <p><strong>There is no off-thread read path, and that is a deliberate absence.</strong> This
- * class used to publish an immutable {@code Snapshot} record through a {@code volatile} field, kept
- * current by listeners on every field in it, because the loopback HTTP layer read state from Tomcat
- * worker threads. That layer is gone, and a record with no reader — maintained on every write, and
- * tested as though it had one — is scaffolding rather than design.
+ * <p>
+ * <strong>There is no off-thread read path, and that is a deliberate absence.</strong> This class used to publish an
+ * immutable {@code Snapshot} record through a {@code volatile} field, kept current by listeners on every field in it,
+ * because the loopback HTTP layer read state from Tomcat worker threads. That layer is gone, and a record with no
+ * reader — maintained on every write, and tested as though it had one — is scaffolding rather than design.
  *
- * <p>When SOAP mode brings a server back, the pattern comes back with it and should be rebuilt
- * rather than improvised: an immutable record published through a {@code volatile} field, rewritten
- * on the FX thread by a listener, and deliberately narrower than this class. The narrowness is the
- * part worth remembering — tail numbers are the most identifying data this tool holds, and a
- * loopback bind separates hosts rather than users, so a projection built for one handler is what
- * stops the next one leaking them by accident. {@link Settings#from(AppState)} is the nearest live
+ * <p>
+ * When SOAP mode brings a server back, the pattern comes back with it and should be rebuilt rather than improvised: an
+ * immutable record published through a {@code volatile} field, rewritten on the FX thread by a listener, and
+ * deliberately narrower than this class. The narrowness is the part worth remembering — tail numbers are the most
+ * identifying data this tool holds, and a loopback bind separates hosts rather than users, so a projection built for
+ * one handler is what stops the next one leaking them by accident. {@link Settings#from(AppState)} is the nearest live
  * example of the shape: read on the FX thread, immutable once it crosses.
  *
- * <p><strong>The same rule covers the collections.</strong> {@link #portTailMappings()} and
- * {@link #soapDataFiles()} return unmodifiable views, not the live lists. Handing out a backing
- * list would reopen exactly the hole the read-only property accessors exist to close — a caller
- * could add an entry from any thread, past the guard, and bypass the uniqueness rules
- * {@link #setPortTailMappings} enforces.
+ * <p>
+ * <strong>The same rule covers the collections.</strong> {@link #portTailMappings()} and {@link #soapDataFiles()}
+ * return unmodifiable views, not the live lists. Handing out a backing list would reopen exactly the hole the read-only
+ * property accessors exist to close — a caller could add an entry from any thread, past the guard, and bypass the
+ * uniqueness rules {@link #setPortTailMappings} enforces.
  *
- * <p><strong>Listeners.</strong> This is an application-lifetime singleton and its subscribers are
- * prototype-scoped FXML controllers, so a listener registered here outlives the scene graph that
- * registered it. Subscribe with {@code javafx.beans.value.WeakChangeListener} (keeping the strong
- * reference in the controller) so a discarded shell is collected instead of being retained — and
- * kept live enough to keep reacting. For the mapping list that means a
- * {@code WeakListChangeListener}: a {@code ChangeListener} on an {@code ObservableList} fires only
- * when the list object itself is replaced, which never happens here, so element edits would reach
- * nobody.
+ * <p>
+ * <strong>Listeners.</strong> This is an application-lifetime singleton and its subscribers are prototype-scoped FXML
+ * controllers, so a listener registered here outlives the scene graph that registered it. Subscribe with
+ * {@code javafx.beans.value.WeakChangeListener} (keeping the strong reference in the controller) so a discarded shell
+ * is collected instead of being retained — and kept live enough to keep reacting. For the mapping list that means a
+ * {@code WeakListChangeListener}: a {@code ChangeListener} on an {@code ObservableList} fires only when the list object
+ * itself is replaced, which never happens here, so element edits would reach nobody.
  */
 @Component
-public class AppState {
+public class AppState
+{
 
     /**
      * The JavaFX Application Thread, recorded when the UI starts.
      *
-     * <p>Deliberately not {@code Platform.isFxApplicationThread()}: that call initialises the
-     * JavaFX toolkit and loads native libraries, which would make the guard — and therefore every
-     * test touching this class — require a display. Recording the thread keeps the check free.
+     * <p>
+     * Deliberately not {@code Platform.isFxApplicationThread()}: that call initialises the JavaFX toolkit and loads
+     * native libraries, which would make the guard — and therefore every test touching this class — require a display.
+     * Recording the thread keeps the check free.
      */
     private static volatile Thread fxApplicationThread;
 
     /**
      * The mode the application is in. Persisted.
      *
-     * <p>The initial values throughout this class are read from {@link Settings#DEFAULTS} rather
-     * than repeated as literals. Two copies of "the default playback speed is 1.0" is precisely the
-     * drift the settings constants were renamed to prevent.
+     * <p>
+     * The initial values throughout this class are read from {@link Settings#DEFAULTS} rather than repeated as
+     * literals. Two copies of "the default playback speed is 1.0" is precisely the drift the settings constants were
+     * renamed to prevent.
      */
-    private final ObjectProperty<Mode> currentMode =
-            new SimpleObjectProperty<>(Settings.DEFAULTS.mode());
+    private final ObjectProperty<Mode> currentMode = new SimpleObjectProperty<>(Settings.DEFAULTS.mode());
 
     /**
      * Log mode's playback speed: a multiplier on real time, {@code 1.0} being real time.
      *
-     * <p>The template's "Sim Factor", renamed and re-specified. It is a Log-mode setting that
-     * happens to have existed before the modes did, which is why it sits in this flat list rather
-     * than in a nested holder — see {@link Settings} for why the persisted form groups the
-     * mode-scoped values and this class does not.
+     * <p>
+     * The template's "Sim Factor", renamed and re-specified. It is a Log-mode setting that happens to have existed
+     * before the modes did, which is why it sits in this flat list rather than in a nested holder — see
+     * {@link Settings} for why the persisted form groups the mode-scoped values and this class does not.
      */
-    private final DoubleProperty playbackSpeedFactor =
-            new SimpleDoubleProperty(Settings.DEFAULTS.log().playbackSpeedFactor());
+    private final DoubleProperty playbackSpeedFactor = new SimpleDoubleProperty(
+            Settings.DEFAULTS.log().playbackSpeedFactor());
 
     /** Log mode's capture folder, or {@code null} if none has been chosen. */
     private final ObjectProperty<File> logFolder = new SimpleObjectProperty<>(null);
@@ -101,115 +102,116 @@ public class AppState {
     /**
      * Log mode's port-to-tail-number table.
      *
-     * <p>Private and never handed out: {@link #portTailMappings()} exposes an unmodifiable view of
-     * it. Every write goes through {@link #setPortTailMappings}, which is where the FX-thread guard
-     * and the uniqueness rules both live.
+     * <p>
+     * Private and never handed out: {@link #portTailMappings()} exposes an unmodifiable view of it. Every write goes
+     * through {@link #setPortTailMappings}, which is where the FX-thread guard and the uniqueness rules both live.
      */
-    private final ObservableList<PortTailMapping> portTailMappings =
-            FXCollections.observableArrayList();
+    private final ObservableList<PortTailMapping> portTailMappings = FXCollections.observableArrayList();
 
-    private final ObservableList<PortTailMapping> portTailMappingsView =
-            FXCollections.unmodifiableObservableList(portTailMappings);
+    private final ObservableList<PortTailMapping> portTailMappingsView = FXCollections
+            .unmodifiableObservableList(portTailMappings);
 
     /** Message mode's only setting. */
-    private final ObjectProperty<MessageType> messageType =
-            new SimpleObjectProperty<>(Settings.DEFAULTS.message().type());
+    private final ObjectProperty<MessageType> messageType = new SimpleObjectProperty<>(
+            Settings.DEFAULTS.message().type());
 
     /** SOAP mode's target address. Validated for form, never checked for reachability. */
-    private final StringProperty soapIp =
-            new SimpleStringProperty(Settings.DEFAULTS.soap().ip());
+    private final StringProperty soapIp = new SimpleStringProperty(Settings.DEFAULTS.soap().ip());
 
     /** Which kind of message SOAP mode will send. Deliberately its own enum, not Message mode's. */
-    private final ObjectProperty<SoapMessageType> soapMessageType =
-            new SimpleObjectProperty<>(Settings.DEFAULTS.soap().type());
+    private final ObjectProperty<SoapMessageType> soapMessageType = new SimpleObjectProperty<>(
+            Settings.DEFAULTS.soap().type());
 
     /**
      * SOAP mode's data files.
      *
-     * <p>Private and never handed out, exactly like the mapping table: {@link #soapDataFiles()}
-     * exposes an unmodifiable view, and every write runs the thread guard. Order is the order they
-     * were chosen in — unlike the mappings, which sort by port, there is nothing here to sort by
-     * that a person would recognise as their own arrangement.
+     * <p>
+     * Private and never handed out, exactly like the mapping table: {@link #soapDataFiles()} exposes an unmodifiable
+     * view, and every write runs the thread guard. Order is the order they were chosen in — unlike the mappings, which
+     * sort by port, there is nothing here to sort by that a person would recognise as their own arrangement.
      */
     private final ObservableList<File> soapDataFiles = FXCollections.observableArrayList();
 
-    private final ObservableList<File> soapDataFilesView =
-            FXCollections.unmodifiableObservableList(soapDataFiles);
+    private final ObservableList<File> soapDataFilesView = FXCollections.unmodifiableObservableList(soapDataFiles);
 
     /**
      * SOAP mode's tail number, or {@code null} if none has been set.
      *
-     * <p>Nullable, unlike a mapping's tail. A mapping without a tail is not a mapping; a first run
-     * with no tail configured is an ordinary state, and the same one the log folder starts in.
+     * <p>
+     * Nullable, unlike a mapping's tail. A mapping without a tail is not a mapping; a first run with no tail configured
+     * is an ordinary state, and the same one the log folder starts in.
      */
     private final StringProperty soapTail = new SimpleStringProperty(null);
 
     /** The colour theme. Read by {@link Settings} directly, on the FX thread. */
-    private final ObjectProperty<Theme> theme =
-            new SimpleObjectProperty<>(Settings.DEFAULTS.theme());
+    private final ObjectProperty<Theme> theme = new SimpleObjectProperty<>(Settings.DEFAULTS.theme());
 
     /**
-     * The port data is blasted to. Global rather than mode-scoped: every mode that eventually sends
-     * anything sends it here, which is why it sits beside the theme rather than under a mode.
+     * The port data is blasted to. Global rather than mode-scoped: every mode that eventually sends anything sends it
+     * here, which is why it sits beside the theme rather than under a mode.
      *
-     * <p>Validated for range, never checked for availability — a bind-time question, and nothing
-     * binds it yet. It replaced the content-opacity slider in the ribbon, which was a view control
-     * rather than a setting and is gone rather than moved.
+     * <p>
+     * Validated for range, never checked for availability — a bind-time question, and nothing binds it yet. It replaced
+     * the content-opacity slider in the ribbon, which was a view control rather than a setting and is gone rather than
+     * moved.
      */
-    private final IntegerProperty blastPort =
-            new SimpleIntegerProperty(Settings.DEFAULTS.blastPort());
+    private final IntegerProperty blastPort = new SimpleIntegerProperty(Settings.DEFAULTS.blastPort());
 
     /** Whether a blast stops after one message. Global. */
-    private final BooleanProperty singleMessage =
-            new SimpleBooleanProperty(Settings.DEFAULTS.singleMessage());
+    private final BooleanProperty singleMessage = new SimpleBooleanProperty(Settings.DEFAULTS.singleMessage());
 
     /** Whether the raw bytes are intercepted on the way out. Global. */
-    private final BooleanProperty byteHijack =
-            new SimpleBooleanProperty(Settings.DEFAULTS.byteHijack());
+    private final BooleanProperty byteHijack = new SimpleBooleanProperty(Settings.DEFAULTS.byteHijack());
 
     /**
-     * Records the calling thread as the JavaFX Application Thread. Called once during UI start-up;
-     * until it is, the mutators do not enforce a thread (there is no UI to protect).
+     * Records the calling thread as the JavaFX Application Thread. Called once during UI start-up; until it is, the
+     * mutators do not enforce a thread (there is no UI to protect).
      */
-    public static void markFxApplicationThread() {
+    public static void markFxApplicationThread()
+    {
         fxApplicationThread = Thread.currentThread();
     }
 
     /**
      * Forgets the recorded thread, restoring the state a fresh JVM starts in.
      *
-     * <p>Package-private, and for tests only — which is why it is not next to a public setter.
-     * {@link #markFxApplicationThread()} writes a JVM-wide static, so a test that records its own
-     * thread leaves every later test in the same JVM measured against a thread that is not the FX
-     * one. That is not hypothetical: it made the FXML smoke tests pass on Windows and fail on Linux
-     * purely on the order Surefire happened to run the classes in, with the guard reporting that
-     * the JavaFX Application Thread was not the JavaFX Application Thread.
+     * <p>
+     * Package-private, and for tests only — which is why it is not next to a public setter.
+     * {@link #markFxApplicationThread()} writes a JVM-wide static, so a test that records its own thread leaves every
+     * later test in the same JVM measured against a thread that is not the FX one. That is not hypothetical: it made
+     * the FXML smoke tests pass on Windows and fail on Linux purely on the order Surefire happened to run the classes
+     * in, with the guard reporting that the JavaFX Application Thread was not the JavaFX Application Thread.
      */
-    static void forgetFxApplicationThread() {
+    static void forgetFxApplicationThread()
+    {
         fxApplicationThread = null;
     }
 
     // --- mode ---------------------------------------------------------------------------------
 
-    public ReadOnlyObjectProperty<Mode> currentModeProperty() {
+    public ReadOnlyObjectProperty<Mode> currentModeProperty()
+    {
         return currentMode;
     }
 
-    public Mode getCurrentMode() {
+    public Mode getCurrentMode()
+    {
         return currentMode.get();
     }
 
     /**
      * Selects a mode.
      *
-     * <p>Null is rejected rather than accepted as "no mode". The template's string view id started
-     * null and the shell treated that as "nothing chosen yet"; a closed enum with a persisted
-     * default has no such state, and allowing one back in would mean every reader needed a null
-     * branch for a case that cannot happen.
+     * <p>
+     * Null is rejected rather than accepted as "no mode". The template's string view id started null and the shell
+     * treated that as "nothing chosen yet"; a closed enum with a persisted default has no such state, and allowing one
+     * back in would mean every reader needed a null branch for a case that cannot happen.
      */
-    public void setCurrentMode(Mode value) {
+    public void setCurrentMode(Mode value)
+    {
         requireFxThread();
-        if (value == null) {
+        if (value == null)
+        {
             throw new IllegalArgumentException("A mode is required; there is no 'no mode' state");
         }
         currentMode.set(value);
@@ -217,28 +219,34 @@ public class AppState {
 
     // --- Log mode -----------------------------------------------------------------------------
 
-    public ReadOnlyDoubleProperty playbackSpeedFactorProperty() {
+    public ReadOnlyDoubleProperty playbackSpeedFactorProperty()
+    {
         return playbackSpeedFactor;
     }
 
-    public double getPlaybackSpeedFactor() {
+    public double getPlaybackSpeedFactor()
+    {
         return playbackSpeedFactor.get();
     }
 
-    public void setPlaybackSpeedFactor(double value) {
+    public void setPlaybackSpeedFactor(double value)
+    {
         requireFxThread();
         playbackSpeedFactor.set(value);
     }
 
-    public ReadOnlyObjectProperty<File> logFolderProperty() {
+    public ReadOnlyObjectProperty<File> logFolderProperty()
+    {
         return logFolder;
     }
 
-    public File getLogFolder() {
+    public File getLogFolder()
+    {
         return logFolder.get();
     }
 
-    public void setLogFolder(File value) {
+    public void setLogFolder(File value)
+    {
         requireFxThread();
         logFolder.set(value);
     }
@@ -246,26 +254,27 @@ public class AppState {
     /**
      * The port-to-tail-number table, as an unmodifiable observable view.
      *
-     * <p>Observable so a table can track it, unmodifiable so it cannot become a second way in. A
-     * caller that wants to change the set calls {@link #setPortTailMappings},
-     * {@link #addPortTailMapping} or {@link #removePortTailMappingForPort} — all of which run the
-     * thread guard and the uniqueness rules.
+     * <p>
+     * Observable so a table can track it, unmodifiable so it cannot become a second way in. A caller that wants to
+     * change the set calls {@link #setPortTailMappings}, {@link #addPortTailMapping} or
+     * {@link #removePortTailMappingForPort} — all of which run the thread guard and the uniqueness rules.
      */
-    public ObservableList<PortTailMapping> portTailMappings() {
+    public ObservableList<PortTailMapping> portTailMappings()
+    {
         return portTailMappingsView;
     }
 
     /**
      * Replaces the whole mapping set.
      *
-     * <p>Replaced wholesale rather than mutated in place, so the uniqueness rules are checked
-     * against the complete set every time, and so a subscriber sees one change event per edit
-     * rather than a remove followed by an add.
+     * <p>
+     * Replaced wholesale rather than mutated in place, so the uniqueness rules are checked against the complete set
+     * every time, and so a subscriber sees one change event per edit rather than a remove followed by an add.
      *
-     * @throws IllegalArgumentException if a port or a tail appears twice, leaving the current set
-     *                                  untouched
+     * @throws IllegalArgumentException if a port or a tail appears twice, leaving the current set untouched
      */
-    public void setPortTailMappings(Collection<PortTailMapping> mappings) {
+    public void setPortTailMappings(Collection<PortTailMapping> mappings)
+    {
         requireFxThread();
         // Validated into a new list before anything is published, so a rejected edit cannot leave
         // the observable list half-updated for whoever is watching it.
@@ -278,7 +287,8 @@ public class AppState {
      *
      * @throws IllegalArgumentException with a message written to be shown to the user
      */
-    public void addPortTailMapping(PortTailMapping mapping) {
+    public void addPortTailMapping(PortTailMapping mapping)
+    {
         requireFxThread();
         List<PortTailMapping> candidate = new ArrayList<>(portTailMappings);
         candidate.add(mapping);
@@ -286,11 +296,13 @@ public class AppState {
     }
 
     /** Removes the mapping for {@code port}, if there is one. */
-    public boolean removePortTailMappingForPort(int port) {
+    public boolean removePortTailMappingForPort(int port)
+    {
         requireFxThread();
         List<PortTailMapping> remaining = new ArrayList<>(portTailMappings);
         boolean removed = remaining.removeIf(mapping -> mapping.port() == port);
-        if (removed) {
+        if (removed)
+        {
             setPortTailMappings(remaining);
         }
         return removed;
@@ -298,17 +310,21 @@ public class AppState {
 
     // --- Message mode -------------------------------------------------------------------------
 
-    public ReadOnlyObjectProperty<MessageType> messageTypeProperty() {
+    public ReadOnlyObjectProperty<MessageType> messageTypeProperty()
+    {
         return messageType;
     }
 
-    public MessageType getMessageType() {
+    public MessageType getMessageType()
+    {
         return messageType.get();
     }
 
-    public void setMessageType(MessageType value) {
+    public void setMessageType(MessageType value)
+    {
         requireFxThread();
-        if (value == null) {
+        if (value == null)
+        {
             throw new IllegalArgumentException("A message type is required");
         }
         messageType.set(value);
@@ -316,38 +332,45 @@ public class AppState {
 
     // --- SOAP mode ----------------------------------------------------------------------------
 
-    public ReadOnlyStringProperty soapIpProperty() {
+    public ReadOnlyStringProperty soapIpProperty()
+    {
         return soapIp;
     }
 
-    public String getSoapIp() {
+    public String getSoapIp()
+    {
         return soapIp.get();
     }
 
     /**
      * Sets SOAP mode's target address.
      *
-     * <p>Validated here as well as in the store, because this is the path a UI control takes and
-     * the store's tolerance rules are about files, not about what the application will accept from
-     * itself. The address is normalised on the way in, so no two callers can store the same address
-     * with different surrounding whitespace.
+     * <p>
+     * Validated here as well as in the store, because this is the path a UI control takes and the store's tolerance
+     * rules are about files, not about what the application will accept from itself. The address is normalised on the
+     * way in, so no two callers can store the same address with different surrounding whitespace.
      */
-    public void setSoapIp(String value) {
+    public void setSoapIp(String value)
+    {
         requireFxThread();
         soapIp.set(IpAddress.requireValid(value));
     }
 
-    public ReadOnlyObjectProperty<SoapMessageType> soapMessageTypeProperty() {
+    public ReadOnlyObjectProperty<SoapMessageType> soapMessageTypeProperty()
+    {
         return soapMessageType;
     }
 
-    public SoapMessageType getSoapMessageType() {
+    public SoapMessageType getSoapMessageType()
+    {
         return soapMessageType.get();
     }
 
-    public void setSoapMessageType(SoapMessageType value) {
+    public void setSoapMessageType(SoapMessageType value)
+    {
         requireFxThread();
-        if (value == null) {
+        if (value == null)
+        {
             throw new IllegalArgumentException("A SOAP message type is required");
         }
         soapMessageType.set(value);
@@ -356,30 +379,37 @@ public class AppState {
     /**
      * SOAP mode's data files, as an unmodifiable observable view.
      *
-     * <p>Observable so a list control can track it, unmodifiable so it cannot become a second way
-     * in — the same contract, and the same reasoning, as {@link #portTailMappings()}.
+     * <p>
+     * Observable so a list control can track it, unmodifiable so it cannot become a second way in — the same contract,
+     * and the same reasoning, as {@link #portTailMappings()}.
      */
-    public ObservableList<File> soapDataFiles() {
+    public ObservableList<File> soapDataFiles()
+    {
         return soapDataFilesView;
     }
 
     /**
      * Replaces the whole set of data files, in the order given.
      *
-     * <p>Duplicates are dropped rather than rejected. A file chosen twice is not a mistake worth
-     * refusing an edit over — it is a person picking the same file from a chooser again — and the
-     * second entry would mean nothing that the first does not.
+     * <p>
+     * Duplicates are dropped rather than rejected. A file chosen twice is not a mistake worth refusing an edit over —
+     * it is a person picking the same file from a chooser again — and the second entry would mean nothing that the
+     * first does not.
      */
-    public void setSoapDataFiles(Collection<File> files) {
+    public void setSoapDataFiles(Collection<File> files)
+    {
         requireFxThread();
         // Built completely before anything is published, so a rejected edit cannot leave the
         // observable list half-updated for whoever is watching it.
         List<File> distinct = new ArrayList<>();
-        for (File file : files) {
-            if (file == null) {
+        for (File file : files)
+        {
+            if (file == null)
+            {
                 throw new IllegalArgumentException("A data file is required");
             }
-            if (!distinct.contains(file)) {
+            if (!distinct.contains(file))
+            {
                 distinct.add(file);
             }
         }
@@ -387,7 +417,8 @@ public class AppState {
     }
 
     /** Appends {@code files}, skipping any already in the list. */
-    public void addSoapDataFiles(Collection<File> files) {
+    public void addSoapDataFiles(Collection<File> files)
+    {
         requireFxThread();
         List<File> candidate = new ArrayList<>(soapDataFiles);
         candidate.addAll(files);
@@ -395,100 +426,119 @@ public class AppState {
     }
 
     /** Removes {@code file}, if it is there. */
-    public boolean removeSoapDataFile(File file) {
+    public boolean removeSoapDataFile(File file)
+    {
         requireFxThread();
         List<File> remaining = new ArrayList<>(soapDataFiles);
         boolean removed = remaining.remove(file);
-        if (removed) {
+        if (removed)
+        {
             setSoapDataFiles(remaining);
         }
         return removed;
     }
 
-    public ReadOnlyStringProperty soapTailProperty() {
+    public ReadOnlyStringProperty soapTailProperty()
+    {
         return soapTail;
     }
 
-    public String getSoapTail() {
+    public String getSoapTail()
+    {
         return soapTail.get();
     }
 
     /**
      * Sets SOAP mode's tail number, or clears it.
      *
-     * <p>Null and blank both mean "none", so a field the user emptied clears the setting rather
-     * than storing a blank that would later fail the tail rule. Anything else must be a tail.
+     * <p>
+     * Null and blank both mean "none", so a field the user emptied clears the setting rather than storing a blank that
+     * would later fail the tail rule. Anything else must be a tail.
      *
      * @throws IllegalArgumentException if {@code value} is present but not a tail number
      */
-    public void setSoapTail(String value) {
+    public void setSoapTail(String value)
+    {
         requireFxThread();
         soapTail.set(TailNumber.requireValidOrAbsent(value));
     }
 
     // --- global -------------------------------------------------------------------------------
 
-    public ReadOnlyIntegerProperty blastPortProperty() {
+    public ReadOnlyIntegerProperty blastPortProperty()
+    {
         return blastPort;
     }
 
-    public int getBlastPort() {
+    public int getBlastPort()
+    {
         return blastPort.get();
     }
 
     /**
      * Sets the Blast Port.
      *
-     * <p>Range-checked here as well as in the store, because this is the path a UI control takes
-     * and the store's tolerance rules are about files, not about what the application will accept
-     * from itself. The range is {@link PortTailMapping}'s, so the mapping table and this setting
-     * cannot drift into disagreeing about what a port is.
+     * <p>
+     * Range-checked here as well as in the store, because this is the path a UI control takes and the store's tolerance
+     * rules are about files, not about what the application will accept from itself. The range is
+     * {@link PortTailMapping}'s, so the mapping table and this setting cannot drift into disagreeing about what a port
+     * is.
      */
-    public void setBlastPort(int value) {
+    public void setBlastPort(int value)
+    {
         requireFxThread();
-        if (value < PortTailMapping.PORT_MIN || value > PortTailMapping.PORT_MAX) {
-            throw new IllegalArgumentException(
-                    "Port must be between " + PortTailMapping.PORT_MIN + " and "
-                            + PortTailMapping.PORT_MAX + ", but was " + value);
+        if (value < PortTailMapping.PORT_MIN || value > PortTailMapping.PORT_MAX)
+        {
+            throw new IllegalArgumentException("Port must be between " + PortTailMapping.PORT_MIN + " and "
+                    + PortTailMapping.PORT_MAX + ", but was " + value);
         }
         blastPort.set(value);
     }
 
-    public ReadOnlyBooleanProperty singleMessageProperty() {
+    public ReadOnlyBooleanProperty singleMessageProperty()
+    {
         return singleMessage;
     }
 
-    public boolean isSingleMessage() {
+    public boolean isSingleMessage()
+    {
         return singleMessage.get();
     }
 
-    public void setSingleMessage(boolean value) {
+    public void setSingleMessage(boolean value)
+    {
         requireFxThread();
         singleMessage.set(value);
     }
 
-    public ReadOnlyBooleanProperty byteHijackProperty() {
+    public ReadOnlyBooleanProperty byteHijackProperty()
+    {
         return byteHijack;
     }
 
-    public boolean isByteHijack() {
+    public boolean isByteHijack()
+    {
         return byteHijack.get();
     }
 
-    public void setByteHijack(boolean value) {
+    public void setByteHijack(boolean value)
+    {
         requireFxThread();
         byteHijack.set(value);
     }
 
-    public ReadOnlyObjectProperty<Theme> themeProperty() {
+    public ReadOnlyObjectProperty<Theme> themeProperty()
+    {
         return theme;
     }
 
-    public Theme getTheme() {
+    public Theme getTheme()
+    {
         return theme.get();
     }
 
-    public void setTheme(Theme value) {
+    public void setTheme(Theme value)
+    {
         requireFxThread();
         theme.set(value);
     }
@@ -496,26 +546,31 @@ public class AppState {
     /**
      * Fails loudly when a mutator is called off the JavaFX Application Thread.
      *
-     * <p>JavaFX properties perform no thread check of their own, so without this an off-thread
-     * write would run the whole listener chain on that thread — every binding, every control that
-     * observes the value, and the settings writer's change listener — producing unsynchronized
-     * writes to UI-owned state and a settings snapshot read while another thread was still editing
-     * it.
+     * <p>
+     * JavaFX properties perform no thread check of their own, so without this an off-thread write would run the whole
+     * listener chain on that thread — every binding, every control that observes the value, and the settings writer's
+     * change listener — producing unsynchronized writes to UI-owned state and a settings snapshot read while another
+     * thread was still editing it.
      */
-    private static void requireFxThread() {
+    private static void requireFxThread()
+    {
         Thread fxThread = fxApplicationThread;
-        if (fxThread != null && Thread.currentThread() != fxThread) {
-            throw new IllegalStateException(
-                    "AppState may only be modified on the JavaFX Application Thread; "
-                            + "call AppState.onFxThread(Runnable) from " + Thread.currentThread().getName());
+        if (fxThread != null && Thread.currentThread() != fxThread)
+        {
+            throw new IllegalStateException("AppState may only be modified on the JavaFX Application Thread; "
+                    + "call AppState.onFxThread(Runnable) from " + Thread.currentThread().getName());
         }
     }
 
     /** Runs {@code action} on the JavaFX Application Thread, from wherever the caller is. */
-    public static void onFxThread(Runnable action) {
-        if (Platform.isFxApplicationThread()) {
+    public static void onFxThread(Runnable action)
+    {
+        if (Platform.isFxApplicationThread())
+        {
             action.run();
-        } else {
+        }
+        else
+        {
             Platform.runLater(action);
         }
     }

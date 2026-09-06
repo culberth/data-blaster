@@ -44,21 +44,22 @@ import org.springframework.context.ApplicationContext;
 /**
  * That Preferences is a view of {@link AppState} rather than a copy of it, tab by tab.
  *
- * <p>Peer review #27 was about a user opening the only thing called Preferences and finding
- * nothing. The fix could easily have introduced the worse problem: a dialog holding its own copy of
- * a setting, agreeing with the ribbon right up until it did not. Every assertion here is about the
- * surfaces sharing state rather than mirroring each other.
+ * <p>
+ * Peer review #27 was about a user opening the only thing called Preferences and finding nothing. The fix could easily
+ * have introduced the worse problem: a dialog holding its own copy of a setting, agreeing with the ribbon right up
+ * until it did not. Every assertion here is about the surfaces sharing state rather than mirroring each other.
  *
- * <p><strong>The tabs are loaded directly, not looked up through the dialog.</strong> A
- * {@code TabPane}'s skin does not build a tab's content until that tab is shown, so a
- * {@code lookup} on an unshown dialog finds whatever happens to be attached and nothing else — a
- * test written that way would pass or fail on which tab is selected rather than on what it meant to
- * check. This is the same reason {@code SettingsRestoreOrderTest} loads ribbon groups directly.
- * That the dialog wires four tabs together is asserted from the {@code TabPane}'s own model below,
- * and that every tab loads is {@code FxmlSmokeTest}'s job.
+ * <p>
+ * <strong>The tabs are loaded directly, not looked up through the dialog.</strong> A {@code TabPane}'s skin does not
+ * build a tab's content until that tab is shown, so a {@code lookup} on an unshown dialog finds whatever happens to be
+ * attached and nothing else — a test written that way would pass or fail on which tab is selected rather than on what
+ * it meant to check. This is the same reason {@code SettingsRestoreOrderTest} loads ribbon groups directly. That the
+ * dialog wires four tabs together is asserted from the {@code TabPane}'s own model below, and that every tab loads is
+ * {@code FxmlSmokeTest}'s job.
  */
 @SpringBootTest
-class PreferencesSurfaceTest {
+class PreferencesSurfaceTest
+{
 
     private static final String PREFERENCES = "/fxml/preferences.fxml";
     private static final String GENERAL_TAB = "/fxml/preferences/general-tab.fxml";
@@ -79,14 +80,17 @@ class PreferencesSurfaceTest {
     private ApplicationContext context;
 
     @BeforeAll
-    static void startToolkit() {
+    static void startToolkit()
+    {
         HeadlessToolkit.start();
         HeadlessToolkit.onFxThread(AppState::markFxApplicationThread);
     }
 
     @AfterEach
-    void resetSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void resetSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setPlaybackSpeedFactor(Settings.PLAYBACK_SPEED_DEFAULT);
             appState.setLogFolder(null);
             appState.setPortTailMappings(List.of());
@@ -103,14 +107,16 @@ class PreferencesSurfaceTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static Spinner<Integer> blastPortSpinner(Parent root) {
+    private static Spinner<Integer> blastPortSpinner(Parent root)
+    {
         Spinner<Integer> spinner = (Spinner<Integer>) root.lookup("#blastPortSpinner");
         assertNotNull(spinner, "the Blast Port spinner should be in the node tree");
         return spinner;
     }
 
     @SuppressWarnings("unchecked")
-    private static Spinner<Double> playbackSpeedSpinner(Parent root) {
+    private static Spinner<Double> playbackSpeedSpinner(Parent root)
+    {
         Spinner<Double> spinner = (Spinner<Double>) root.lookup("#playbackSpeedSpinner");
         assertNotNull(spinner, "the Playback Speed spinner should be in the node tree");
         return spinner;
@@ -120,8 +126,10 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("Preferences opens with one tab per scope, and none for REST")
-    void preferencesOpensWithOneTabPerScope() {
-        HeadlessToolkit.onFxThread(() -> {
+    void preferencesOpensWithOneTabPerScope()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             TabPane tabs = (TabPane) viewLoader.loadParent(PREFERENCES).lookup("#tabs");
             assertNotNull(tabs, "the dialog should be a TabPane");
 
@@ -135,19 +143,23 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the Log tab opens showing the live state, not the FXML default")
-    void theLogTabOpensShowingTheLiveState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theLogTabOpensShowingTheLiveState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setPlaybackSpeedFactor(1.5);
 
-            assertEquals(1.5, playbackSpeedSpinner(viewLoader.loadParent(LOG_TAB)).getValue(),
-                    0.0001, "the tab should read the live state, not a value baked into markup");
+            assertEquals(1.5, playbackSpeedSpinner(viewLoader.loadParent(LOG_TAB)).getValue(), 0.0001,
+                    "the tab should read the live state, not a value baked into markup");
         });
     }
 
     @Test
     @DisplayName("editing the Log tab writes through to the shared state")
-    void editingTheLogTabWritesThroughToTheSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void editingTheLogTabWritesThroughToTheSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
 
             playbackSpeedSpinner(tab).getValueFactory().setValue(4.0);
@@ -157,17 +169,18 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The control's bounds and the store's range check read from the same constants, so a spinner
-     * cannot offer a value the store would reject on the next launch — which would look to the user
-     * like a setting that silently refuses to stick.
+     * The control's bounds and the store's range check read from the same constants, so a spinner cannot offer a value
+     * the store would reject on the next launch — which would look to the user like a setting that silently refuses to
+     * stick.
      */
     @Test
     @DisplayName("the speed spinner cannot offer a value the store would reject")
-    void theSpeedSpinnerCannotOfferAValueTheStoreWouldReject() {
-        HeadlessToolkit.onFxThread(() -> {
-            SpinnerValueFactory.DoubleSpinnerValueFactory factory =
-                    (SpinnerValueFactory.DoubleSpinnerValueFactory)
-                            playbackSpeedSpinner(viewLoader.loadParent(LOG_TAB)).getValueFactory();
+    void theSpeedSpinnerCannotOfferAValueTheStoreWouldReject()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
+            SpinnerValueFactory.DoubleSpinnerValueFactory factory = (SpinnerValueFactory.DoubleSpinnerValueFactory) playbackSpeedSpinner(
+                    viewLoader.loadParent(LOG_TAB)).getValueFactory();
 
             assertEquals(Settings.PLAYBACK_SPEED_MIN, factory.getMin(), 0.0001);
             assertEquals(Settings.PLAYBACK_SPEED_MAX, factory.getMax(), 0.0001);
@@ -175,13 +188,15 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The log folder read-out is bound in both surfaces rather than assigned, so this holds without
-     * either being rebuilt — the case a copy-and-sync implementation gets wrong.
+     * The log folder read-out is bound in both surfaces rather than assigned, so this holds without either being
+     * rebuilt — the case a copy-and-sync implementation gets wrong.
      */
     @Test
     @DisplayName("the Log tab and the Log ribbon group show the same folder, live")
-    void theLogTabAndTheLogRibbonGroupShowTheSameFolderLive() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theLogTabAndTheLogRibbonGroupShowTheSameFolderLive()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Label inDialog = (Label) viewLoader.loadParent(LOG_TAB).lookup("#logFolderLabel");
             Label inRibbon = (Label) viewLoader.loadParent(LOG_GROUP).lookup("#logFolderLabel");
             assertEquals("(none selected)", inDialog.getText());
@@ -198,8 +213,10 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the Log tab reset restores its own settings and then disables itself")
-    void theLogTabResetRestoresItsOwnSettings() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theLogTabResetRestoresItsOwnSettings()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             Button reset = (Button) tab.lookup("#resetButton");
             assertTrue(reset.isDisabled(), "nothing to reset when everything is already default");
@@ -214,8 +231,7 @@ class PreferencesSurfaceTest {
 
             assertEquals(Settings.PLAYBACK_SPEED_DEFAULT, appState.getPlaybackSpeedFactor(), 0.0001);
             assertNull(appState.getLogFolder());
-            assertEquals(Settings.PLAYBACK_SPEED_DEFAULT,
-                    playbackSpeedSpinner(tab).getValue(), 0.0001,
+            assertEquals(Settings.PLAYBACK_SPEED_DEFAULT, playbackSpeedSpinner(tab).getValue(), 0.0001,
                     "the control must follow, not just the state behind it");
             assertTrue(reset.isDisabled());
         });
@@ -224,8 +240,10 @@ class PreferencesSurfaceTest {
     /** R18's point: a reset is per tab, so it must not reach across into another tab's settings. */
     @Test
     @DisplayName("a tab's reset does not touch another tab's settings")
-    void aTabsResetDoesNotTouchAnotherTabsSettings() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aTabsResetDoesNotTouchAnotherTabsSettings()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setTheme(Theme.DARK);
             appState.setBlastPort(9443);
             appState.setSingleMessage(true);
@@ -248,16 +266,16 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the theme chooser reads and writes the shared state")
-    void theThemeChooserReadsAndWritesTheSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theThemeChooserReadsAndWritesTheSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setTheme(Theme.DARK);
 
             @SuppressWarnings("unchecked")
-            ChoiceBox<Theme> chooser =
-                    (ChoiceBox<Theme>) viewLoader.loadParent(GENERAL_TAB).lookup("#themeChoice");
+            ChoiceBox<Theme> chooser = (ChoiceBox<Theme>) viewLoader.loadParent(GENERAL_TAB).lookup("#themeChoice");
             assertNotNull(chooser);
-            assertEquals(Theme.DARK, chooser.getValue(),
-                    "the chooser should open on the live theme, not the default");
+            assertEquals(Theme.DARK, chooser.getValue(), "the chooser should open on the live theme, not the default");
 
             chooser.setValue(Theme.LIGHT);
             assertSame(Theme.LIGHT, appState.getTheme());
@@ -265,14 +283,15 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The three settings that replaced the opacity slider. Opacity was a view control and lived in
-     * one place; these are settings, so they are in the ribbon and here, and neither surface holds
-     * its own copy.
+     * The three settings that replaced the opacity slider. Opacity was a view control and lived in one place; these are
+     * settings, so they are in the ribbon and here, and neither surface holds its own copy.
      */
     @Test
     @DisplayName("the General tab and the Global ribbon group share the three global settings")
-    void theGeneralTabAndTheGlobalRibbonGroupShareTheThreeGlobalSettings() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theGeneralTabAndTheGlobalRibbonGroupShareTheThreeGlobalSettings()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(GENERAL_TAB);
             Parent ribbon = viewLoader.loadParent(GLOBAL_GROUP);
 
@@ -292,17 +311,19 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The same rule the playback speed spinner is held to: a control that offers a value the store
-     * would reject on the next launch looks to the user like a setting that refuses to stick.
+     * The same rule the playback speed spinner is held to: a control that offers a value the store would reject on the
+     * next launch looks to the user like a setting that refuses to stick.
      */
     @Test
     @DisplayName("both Blast Port spinners are bounded by the valid port range")
-    void bothBlastPortSpinnersAreBoundedByTheValidPortRange() {
-        HeadlessToolkit.onFxThread(() -> {
-            for (String surface : List.of(GENERAL_TAB, GLOBAL_GROUP)) {
-                SpinnerValueFactory.IntegerSpinnerValueFactory factory =
-                        (SpinnerValueFactory.IntegerSpinnerValueFactory)
-                                blastPortSpinner(viewLoader.loadParent(surface)).getValueFactory();
+    void bothBlastPortSpinnersAreBoundedByTheValidPortRange()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
+            for (String surface : List.of(GENERAL_TAB, GLOBAL_GROUP))
+            {
+                SpinnerValueFactory.IntegerSpinnerValueFactory factory = (SpinnerValueFactory.IntegerSpinnerValueFactory) blastPortSpinner(
+                        viewLoader.loadParent(surface)).getValueFactory();
 
                 assertEquals(PortTailMapping.PORT_MIN, factory.getMin(), surface);
                 assertEquals(PortTailMapping.PORT_MAX, factory.getMax(), surface);
@@ -312,8 +333,10 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the General tab reset restores all four of its settings and then disables itself")
-    void theGeneralTabResetRestoresAllFourOfItsSettings() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theGeneralTabResetRestoresAllFourOfItsSettings()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(GENERAL_TAB);
             Button reset = (Button) tab.lookup("#resetButton");
             assertTrue(reset.isDisabled(), "nothing to reset when everything is already default");
@@ -339,14 +362,15 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the General tab shows where the settings actually live")
-    void theGeneralTabShowsWhereTheSettingsActuallyLive() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theGeneralTabShowsWhereTheSettingsActuallyLive()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Label path = (Label) viewLoader.loadParent(GENERAL_TAB).lookup("#settingsFileLabel");
 
             assertNotNull(path);
             assertTrue(path.getText().endsWith("settings.properties"),
-                    "answering \"where did my setting go\" is the point of this label: "
-                            + path.getText());
+                    "answering \"where did my setting go\" is the point of this label: " + path.getText());
         });
     }
 
@@ -354,14 +378,16 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the Message tab and the Message ribbon group share one value")
-    void theMessageTabAndTheMessageRibbonGroupShareOneValue() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theMessageTabAndTheMessageRibbonGroupShareOneValue()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             @SuppressWarnings("unchecked")
-            ChoiceBox<MessageType> inDialog = (ChoiceBox<MessageType>)
-                    viewLoader.loadParent(MESSAGE_TAB).lookup("#messageTypeChoice");
+            ChoiceBox<MessageType> inDialog = (ChoiceBox<MessageType>) viewLoader.loadParent(MESSAGE_TAB)
+                    .lookup("#messageTypeChoice");
             @SuppressWarnings("unchecked")
-            ChoiceBox<MessageType> inRibbon = (ChoiceBox<MessageType>)
-                    viewLoader.loadParent(MESSAGE_GROUP).lookup("#messageTypeChoice");
+            ChoiceBox<MessageType> inRibbon = (ChoiceBox<MessageType>) viewLoader.loadParent(MESSAGE_GROUP)
+                    .lookup("#messageTypeChoice");
 
             inDialog.setValue(MessageType.MESSAGE_3);
 
@@ -373,11 +399,13 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the Message tab offers every constant, without listing them in the markup")
-    void theMessageTabOffersEveryConstant() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theMessageTabOffersEveryConstant()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             @SuppressWarnings("unchecked")
-            ChoiceBox<MessageType> chooser = (ChoiceBox<MessageType>)
-                    viewLoader.loadParent(MESSAGE_TAB).lookup("#messageTypeChoice");
+            ChoiceBox<MessageType> chooser = (ChoiceBox<MessageType>) viewLoader.loadParent(MESSAGE_TAB)
+                    .lookup("#messageTypeChoice");
 
             assertEquals(List.of(MessageType.values()), List.copyOf(chooser.getItems()));
         });
@@ -385,15 +413,16 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the SOAP address reads and writes the shared state")
-    void theSoapAddressReadsAndWritesTheSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theSoapAddressReadsAndWritesTheSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setSoapIp("10.20.30.40");
 
             Parent tab = viewLoader.loadParent(SOAP_TAB);
             TextField ip = (TextField) tab.lookup("#ipField");
             assertNotNull(ip);
-            assertEquals("10.20.30.40", ip.getText(),
-                    "the tab should open on the live address, not the default");
+            assertEquals("10.20.30.40", ip.getText(), "the tab should open on the live address, not the default");
 
             ip.setText("192.168.0.9");
             ip.fireEvent(new ActionEvent(ip, null));
@@ -403,13 +432,15 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The mapping editor's rule, applied to this tab: a bad entry is refused where it is made, the
-     * reason is shown beside the field, and the state is left exactly as it was.
+     * The mapping editor's rule, applied to this tab: a bad entry is refused where it is made, the reason is shown
+     * beside the field, and the state is left exactly as it was.
      */
     @Test
     @DisplayName("a malformed address is refused with the reason beside the field")
-    void aMalformedAddressIsRefusedWithTheReasonBesideTheField() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aMalformedAddressIsRefusedWithTheReasonBesideTheField()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(SOAP_TAB);
             TextField ip = (TextField) tab.lookup("#ipField");
             Label error = (Label) tab.lookup("#ipErrorLabel");
@@ -418,8 +449,7 @@ class PreferencesSurfaceTest {
             ip.setText("10.0.0.256");
             ip.fireEvent(new ActionEvent(ip, null));
 
-            assertEquals(Settings.DEFAULTS.soap().ip(), appState.getSoapIp(),
-                    "a rejected entry must change nothing");
+            assertEquals(Settings.DEFAULTS.soap().ip(), appState.getSoapIp(), "a rejected entry must change nothing");
             assertTrue(error.isVisible(), "and must say why");
             assertTrue(error.getText().contains("10.0.0.256"), error.getText());
             assertEquals("10.0.0.256", ip.getText(),
@@ -429,11 +459,13 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the SOAP tab offers every message type, without listing them in the markup")
-    void theSoapTabOffersEveryMessageType() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theSoapTabOffersEveryMessageType()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             @SuppressWarnings("unchecked")
-            ChoiceBox<SoapMessageType> chooser = (ChoiceBox<SoapMessageType>)
-                    viewLoader.loadParent(SOAP_TAB).lookup("#soapMessageTypeChoice");
+            ChoiceBox<SoapMessageType> chooser = (ChoiceBox<SoapMessageType>) viewLoader.loadParent(SOAP_TAB)
+                    .lookup("#soapMessageTypeChoice");
             assertNotNull(chooser);
 
             assertEquals(List.of(SoapMessageType.values()), List.copyOf(chooser.getItems()));
@@ -446,16 +478,17 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The list is AppState's unmodifiable view rather than a copy, so it tracks edits without being
-     * rebuilt — and cannot become a second way to change the setting.
+     * The list is AppState's unmodifiable view rather than a copy, so it tracks edits without being rebuilt — and
+     * cannot become a second way to change the setting.
      */
     @Test
     @DisplayName("the data file list is a live view of the shared state")
-    void theDataFileListIsALiveViewOfTheSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theDataFileListIsALiveViewOfTheSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             @SuppressWarnings("unchecked")
-            ListView<File> list = (ListView<File>)
-                    viewLoader.loadParent(SOAP_TAB).lookup("#dataFileList");
+            ListView<File> list = (ListView<File>) viewLoader.loadParent(SOAP_TAB).lookup("#dataFileList");
             assertNotNull(list);
             assertTrue(list.getItems().isEmpty());
 
@@ -471,8 +504,10 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the tail number reads and writes the shared state, normalised")
-    void theTailNumberReadsAndWritesTheSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theTailNumberReadsAndWritesTheSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(SOAP_TAB);
             TextField tail = (TextField) tab.lookup("#tailField");
             assertNotNull(tail);
@@ -489,8 +524,10 @@ class PreferencesSurfaceTest {
     /** The same rule as the mapping table's tails, which is the whole point of sharing it. */
     @Test
     @DisplayName("a malformed tail is refused with the reason beside the field")
-    void aMalformedTailIsRefusedWithTheReasonBesideTheField() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aMalformedTailIsRefusedWithTheReasonBesideTheField()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(SOAP_TAB);
             TextField tail = (TextField) tab.lookup("#tailField");
             Label error = (Label) tab.lookup("#tailErrorLabel");
@@ -507,13 +544,15 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * Empty is a state this setting has and a mapping's tail does not, so clearing the field must
-     * clear the setting rather than fail the six-character rule.
+     * Empty is a state this setting has and a mapping's tail does not, so clearing the field must clear the setting
+     * rather than fail the six-character rule.
      */
     @Test
     @DisplayName("emptying the tail field clears the setting rather than failing the rule")
-    void emptyingTheTailFieldClearsTheSetting() {
-        HeadlessToolkit.onFxThread(() -> {
+    void emptyingTheTailFieldClearsTheSetting()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setSoapTail("N12345");
             Parent tab = viewLoader.loadParent(SOAP_TAB);
             TextField tail = (TextField) tab.lookup("#tailField");
@@ -530,8 +569,10 @@ class PreferencesSurfaceTest {
 
     @Test
     @DisplayName("the SOAP tab reset restores its own settings and then disables itself")
-    void theSoapTabResetRestoresItsOwnSettings() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theSoapTabResetRestoresItsOwnSettings()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(SOAP_TAB);
             Button reset = (Button) tab.lookup("#resetButton");
             assertTrue(reset.isDisabled(), "nothing to reset when everything is already default");
@@ -555,16 +596,19 @@ class PreferencesSurfaceTest {
     // --- what is deliberately absent ----------------------------------------------------------
 
     /**
-     * Opacity was a view control rather than a setting, and it is gone rather than moved: it is not
-     * in Preferences, and it is not in the ribbon group that used to hold it. Its slot in the ribbon
-     * went to three settings that <em>are</em> persisted.
+     * Opacity was a view control rather than a setting, and it is gone rather than moved: it is not in Preferences, and
+     * it is not in the ribbon group that used to hold it. Its slot in the ribbon went to three settings that
+     * <em>are</em> persisted.
      */
     @Test
     @DisplayName("the opacity slider is gone from every surface, not relocated")
-    void theOpacitySliderIsGoneFromEverySurface() {
-        HeadlessToolkit.onFxThread(() -> {
-            for (String surface : List.of(GENERAL_TAB, LOG_TAB, MESSAGE_TAB, SOAP_TAB,
-                    GLOBAL_GROUP, LOG_GROUP, MESSAGE_GROUP)) {
+    void theOpacitySliderIsGoneFromEverySurface()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
+            for (String surface : List.of(GENERAL_TAB, LOG_TAB, MESSAGE_TAB, SOAP_TAB, GLOBAL_GROUP, LOG_GROUP,
+                    MESSAGE_GROUP))
+            {
                 assertNull(viewLoader.loadParent(surface).lookup("#opacitySlider"),
                         "opacity was a view control and was removed, not moved: " + surface);
             }
@@ -572,14 +616,16 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * The Global group holds the settings that belong to no mode, and only those. Playback Speed
-     * Factor is a Log-mode setting and lives in the Log group and the Log tab; the template's Sim
-     * Factor slider that used to share this group is gone entirely.
+     * The Global group holds the settings that belong to no mode, and only those. Playback Speed Factor is a Log-mode
+     * setting and lives in the Log group and the Log tab; the template's Sim Factor slider that used to share this
+     * group is gone entirely.
      */
     @Test
     @DisplayName("the Global group carries no mode-scoped setting")
-    void theGlobalGroupCarriesNoModeScopedSetting() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theGlobalGroupCarriesNoModeScopedSetting()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent global = viewLoader.loadParent(GLOBAL_GROUP);
 
             assertNull(global.lookup("#simFactorSlider"),
@@ -593,41 +639,43 @@ class PreferencesSurfaceTest {
     }
 
     /**
-     * SOAP mode sends rather than listens, so the setting it needs is a destination. A listen port
-     * that nothing could ever bind was a setting shaped like a question the mode does not ask.
+     * SOAP mode sends rather than listens, so the setting it needs is a destination. A listen port that nothing could
+     * ever bind was a setting shaped like a question the mode does not ask.
      */
     @Test
     @DisplayName("the SOAP listen port is gone, replaced by an address")
-    void theSoapListenPortIsGone() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theSoapListenPortIsGone()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(SOAP_TAB);
 
-            assertNull(tab.lookup("#portSpinner"),
-                    "the listen port should be gone, not sitting alongside the address");
+            assertNull(tab.lookup("#portSpinner"), "the listen port should be gone, not sitting alongside the address");
             assertNotNull(tab.lookup("#ipField"));
         });
     }
 
     /**
-     * The chooser is shared rather than duplicated, which keeps the remembered directory and the
-     * dialog's title from drifting apart between the two surfaces.
+     * The chooser is shared rather than duplicated, which keeps the remembered directory and the dialog's title from
+     * drifting apart between the two surfaces.
      */
     @Test
     @DisplayName("both surfaces use one log-folder chooser")
-    void bothSurfacesUseOneLogFolderChooser() {
+    void bothSurfacesUseOneLogFolderChooser()
+    {
         assertSame(context.getBean(LogFolderChooser.class), context.getBean(LogFolderChooser.class),
                 "LogFolderChooser must be a singleton, or the remembered directory resets");
     }
 
     /**
-     * The data file chooser has one surface today, so the singleton is not about sharing — it is
-     * about the remembered directory outliving the prototype controller that opened it. A
-     * FileChooser held as a field on a prototype controller is discarded with its node tree, and
-     * the next Add starts back at the default location.
+     * The data file chooser has one surface today, so the singleton is not about sharing — it is about the remembered
+     * directory outliving the prototype controller that opened it. A FileChooser held as a field on a prototype
+     * controller is discarded with its node tree, and the next Add starts back at the default location.
      */
     @Test
     @DisplayName("the data file chooser is a singleton, so it remembers where you were")
-    void theDataFileChooserIsASingleton() {
+    void theDataFileChooserIsASingleton()
+    {
         assertSame(context.getBean(DataFileChooser.class), context.getBean(DataFileChooser.class),
                 "DataFileChooser must be a singleton, or the remembered directory resets");
     }

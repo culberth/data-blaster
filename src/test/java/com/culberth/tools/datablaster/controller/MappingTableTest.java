@@ -28,16 +28,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * The port-to-tail mapping editor: acceptance criterion A4.
  *
- * <p>{@code PortTailMappingTest} already pins the rules themselves, at the model layer and without a
- * toolkit. What this adds is that the editor actually enforces them <em>at entry</em> and says why —
- * the half that lives in the UI and that a model test cannot reach. A validator nothing calls, or
- * one whose message is swallowed, would leave that suite green and the feature broken.
+ * <p>
+ * {@code PortTailMappingTest} already pins the rules themselves, at the model layer and without a toolkit. What this
+ * adds is that the editor actually enforces them <em>at entry</em> and says why — the half that lives in the UI and
+ * that a model test cannot reach. A validator nothing calls, or one whose message is swallowed, would leave that suite
+ * green and the feature broken.
  *
- * <p>The Log tab is loaded directly rather than through the dialog, for the {@code TabPane} reason
- * given in {@code PreferencesSurfaceTest}.
+ * <p>
+ * The Log tab is loaded directly rather than through the dialog, for the {@code TabPane} reason given in
+ * {@code PreferencesSurfaceTest}.
  */
 @SpringBootTest
-class MappingTableTest {
+class MappingTableTest
+{
 
     private static final String LOG_TAB = "/fxml/preferences/log-tab.fxml";
 
@@ -48,14 +51,17 @@ class MappingTableTest {
     private AppState appState;
 
     @BeforeAll
-    static void startToolkit() {
+    static void startToolkit()
+    {
         HeadlessToolkit.start();
         HeadlessToolkit.onFxThread(AppState::markFxApplicationThread);
     }
 
     @AfterEach
-    void resetSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void resetSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setPortTailMappings(List.of());
             appState.setBlastPort(8081);
         });
@@ -64,54 +70,54 @@ class MappingTableTest {
     // --- helpers ------------------------------------------------------------------------------
 
     @SuppressWarnings("unchecked")
-    private static TableView<PortTailMapping> table(Parent tab) {
-        TableView<PortTailMapping> table =
-                (TableView<PortTailMapping>) tab.lookup("#mappingTable");
+    private static TableView<PortTailMapping> table(Parent tab)
+    {
+        TableView<PortTailMapping> table = (TableView<PortTailMapping>) tab.lookup("#mappingTable");
         assertNotNull(table, "the mapping table should be in the Log tab");
         return table;
     }
 
-    private static void typeAndAdd(Parent tab, String port, String tail) {
+    private static void typeAndAdd(Parent tab, String port, String tail)
+    {
         ((TextField) tab.lookup("#newPortField")).setText(port);
         ((TextField) tab.lookup("#newTailField")).setText(tail);
         ((Button) tab.lookup("#addButton")).fire();
     }
 
-    private static Label error(Parent tab) {
+    private static Label error(Parent tab)
+    {
         return (Label) tab.lookup("#mappingErrorLabel");
     }
 
     /**
      * Commits an edit the way the cell does, by firing the column's edit-commit handler.
      *
-     * <p>Driving the cell's text field itself would need a shown stage and a focus model; the
-     * handler is where this controller's logic actually lives, and firing it is the same event the
-     * cell would raise.
+     * <p>
+     * Driving the cell's text field itself would need a shown stage and a focus model; the handler is where this
+     * controller's logic actually lives, and firing it is the same event the cell would raise.
      */
     @SuppressWarnings("unchecked")
-    private static void commitEdit(Parent tab, String header, int row, String newValue) {
+    private static void commitEdit(Parent tab, String header, int row, String newValue)
+    {
         TableView<PortTailMapping> table = table(tab);
         // Found by header text, not by lookup: a TableColumn is not a Node, so it is not in the
         // scene graph a CSS lookup walks.
         TableColumn<PortTailMapping, String> column = table.getColumns().stream()
-                .filter(c -> header.equals(c.getText()))
-                .map(c -> (TableColumn<PortTailMapping, String>) c)
-                .findFirst()
+                .filter(c -> header.equals(c.getText())).map(c -> (TableColumn<PortTailMapping, String>) c).findFirst()
                 .orElseThrow(() -> new AssertionError("no column headed " + header));
 
-        Event.fireEvent(column, new TableColumn.CellEditEvent<>(
-                table,
-                new TablePosition<>(table, row, column),
-                TableColumn.editCommitEvent(),
-                newValue));
+        Event.fireEvent(column, new TableColumn.CellEditEvent<>(table, new TablePosition<>(table, row, column),
+                TableColumn.editCommitEvent(), newValue));
     }
 
     // --- adding -------------------------------------------------------------------------------
 
     @Test
     @DisplayName("a valid mapping is added and the entry fields are cleared")
-    void aValidMappingIsAdded() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aValidMappingIsAdded()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
 
             typeAndAdd(tab, "5001", "N12345");
@@ -126,8 +132,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("a tail is normalised on the way in")
-    void aTailIsNormalisedOnTheWayIn() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aTailIsNormalisedOnTheWayIn()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
 
             typeAndAdd(tab, " 5001 ", " n12345 ");
@@ -140,8 +148,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("a malformed tail is rejected at entry and the reason is shown")
-    void aMalformedTailIsRejectedAtEntry() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aMalformedTailIsRejectedAtEntry()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
 
             typeAndAdd(tab, "5001", "N123");
@@ -155,8 +165,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("a port that is not a number is rejected with a message about ports")
-    void aPortThatIsNotANumberIsRejected() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aPortThatIsNotANumberIsRejected()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
 
             typeAndAdd(tab, "not-a-port", "N12345");
@@ -168,8 +180,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("a port outside the range is rejected")
-    void aPortOutsideTheRangeIsRejected() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aPortOutsideTheRangeIsRejected()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
 
             typeAndAdd(tab, "70000", "N12345");
@@ -181,8 +195,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("a duplicate port is rejected, naming the port")
-    void aDuplicatePortIsRejected() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aDuplicatePortIsRejected()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             typeAndAdd(tab, "5001", "N12345");
 
@@ -196,8 +212,10 @@ class MappingTableTest {
     /** The direction the file format cannot enforce, so the editor has to. */
     @Test
     @DisplayName("a duplicate tail is rejected even when it differs only in case")
-    void aDuplicateTailIsRejectedEvenWhenItDiffersOnlyInCase() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aDuplicateTailIsRejectedEvenWhenItDiffersOnlyInCase()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             typeAndAdd(tab, "5001", "N12345");
 
@@ -210,8 +228,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("a later valid entry clears the previous error")
-    void aLaterValidEntryClearsThePreviousError() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aLaterValidEntryClearsThePreviousError()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             typeAndAdd(tab, "5001", "bad");
             assertTrue(error(tab).isVisible());
@@ -226,8 +246,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("an existing tail can be edited in place")
-    void anExistingTailCanBeEditedInPlace() {
-        HeadlessToolkit.onFxThread(() -> {
+    void anExistingTailCanBeEditedInPlace()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             typeAndAdd(tab, "5001", "N12345");
 
@@ -239,8 +261,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("an existing port can be edited in place")
-    void anExistingPortCanBeEditedInPlace() {
-        HeadlessToolkit.onFxThread(() -> {
+    void anExistingPortCanBeEditedInPlace()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             typeAndAdd(tab, "5001", "N12345");
 
@@ -252,8 +276,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("an edit that breaks a rule is refused and the old value stands")
-    void anEditThatBreaksARuleIsRefused() {
-        HeadlessToolkit.onFxThread(() -> {
+    void anEditThatBreaksARuleIsRefused()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             typeAndAdd(tab, "5001", "N12345");
             typeAndAdd(tab, "5002", "123456");
@@ -261,10 +287,8 @@ class MappingTableTest {
             // Would collide with the tail already on port 5001.
             commitEdit(tab, "Tail No.", 1, "N12345");
 
-            assertEquals(
-                    List.of(PortTailMapping.of(5001, "N12345"), PortTailMapping.of(5002, "123456")),
-                    appState.portTailMappings(),
-                    "a rejected edit must leave the table exactly as it was");
+            assertEquals(List.of(PortTailMapping.of(5001, "N12345"), PortTailMapping.of(5002, "123456")),
+                    appState.portTailMappings(), "a rejected edit must leave the table exactly as it was");
             assertTrue(error(tab).isVisible(), "and must say why");
         });
     }
@@ -273,8 +297,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("Remove is disabled until a row is selected, then removes that row")
-    void removeIsDisabledUntilARowIsSelected() {
-        HeadlessToolkit.onFxThread(() -> {
+    void removeIsDisabledUntilARowIsSelected()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent tab = viewLoader.loadParent(LOG_TAB);
             Button remove = (Button) tab.lookup("#removeButton");
             typeAndAdd(tab, "5001", "N12345");
@@ -293,14 +319,16 @@ class MappingTableTest {
     // --- the Blast Port collision notice (R19) ------------------------------------------------
 
     /**
-     * A warning, not a block. Nothing binds either port yet and the two settings are independent, so
-     * refusing the entry would be inventing a rule; but the conflict it predicts would surface much
-     * later, at bind time, in a different mode, with nothing pointing back here.
+     * A warning, not a block. Nothing binds either port yet and the two settings are independent, so refusing the entry
+     * would be inventing a rule; but the conflict it predicts would surface much later, at bind time, in a different
+     * mode, with nothing pointing back here.
      */
     @Test
     @DisplayName("a mapping port that matches the Blast Port is flagged but allowed")
-    void aMappingPortThatMatchesTheBlastPortIsFlaggedButAllowed() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aMappingPortThatMatchesTheBlastPortIsFlaggedButAllowed()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setBlastPort(8081);
             Parent tab = viewLoader.loadParent(LOG_TAB);
             Label notice = (Label) tab.lookup("#portCollisionLabel");
@@ -316,8 +344,10 @@ class MappingTableTest {
 
     @Test
     @DisplayName("the collision notice clears when the collision goes away")
-    void theCollisionNoticeClearsWhenTheCollisionGoesAway() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theCollisionNoticeClearsWhenTheCollisionGoesAway()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setBlastPort(8081);
             Parent tab = viewLoader.loadParent(LOG_TAB);
             Label notice = (Label) tab.lookup("#portCollisionLabel");

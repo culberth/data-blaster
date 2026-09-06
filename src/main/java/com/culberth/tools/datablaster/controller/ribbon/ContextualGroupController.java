@@ -18,32 +18,34 @@ import org.springframework.stereotype.Component;
 /**
  * The slot in the ribbon that follows the selected mode, swapping in that mode's group.
  *
- * <p><strong>It is itself an ordinary ribbon group, and that is the point.</strong> The shell
- * includes it with one {@code <fx:include>} like any other, and the swapping happens in here rather
- * than in {@code MainController}. Putting it in the shell would have been the obvious move and
- * would have broken the property this ribbon is built on — that adding a group is a new FXML, a new
- * controller and one include, with no edit to the shell and none to another group.
+ * <p>
+ * <strong>It is itself an ordinary ribbon group, and that is the point.</strong> The shell includes it with one
+ * {@code <fx:include>} like any other, and the swapping happens in here rather than in {@code MainController}. Putting
+ * it in the shell would have been the obvious move and would have broken the property this ribbon is built on — that
+ * adding a group is a new FXML, a new controller and one include, with no edit to the shell and none to another group.
  *
- * <p>It is the same shape as the content-area swap the shell performs, one level down: observe
- * {@code currentMode}, resolve it through a registry, replace the children. The two registries are
- * deliberately separate; see {@link RibbonGroupRegistry} for why.
+ * <p>
+ * It is the same shape as the content-area swap the shell performs, one level down: observe {@code currentMode},
+ * resolve it through a registry, replace the children. The two registries are deliberately separate; see
+ * {@link RibbonGroupRegistry} for why.
  *
- * <p><strong>Not every mode has a group.</strong> SOAP and REST have none, so this slot renders
- * nothing and takes no space — it un-manages itself rather than leaving an empty box with a stray
- * separator beside it.
+ * <p>
+ * <strong>Not every mode has a group.</strong> SOAP and REST have none, so this slot renders nothing and takes no space
+ * — it un-manages itself rather than leaving an empty box with a stray separator beside it.
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class ContextualGroupController {
+public class ContextualGroupController
+{
 
-    private static final System.Logger LOG =
-            System.getLogger(ContextualGroupController.class.getName());
+    private static final System.Logger LOG = System.getLogger(ContextualGroupController.class.getName());
 
     /**
      * Where {@link #initialize()} parks a reference to this controller on its own root node.
      *
-     * <p>Public so {@code ContextualRibbonTest} can assert the reference is there. That check is
-     * deterministic, where a test that forced a collection and hoped would not be.
+     * <p>
+     * Public so {@code ContextualRibbonTest} can assert the reference is there. That check is deterministic, where a
+     * test that forced a collection and hoped would not be.
      */
     public static final String CONTROLLER_KEY = "datablaster.contextualGroupController";
 
@@ -55,25 +57,25 @@ public class ContextualGroupController {
     private final RibbonGroupRegistry ribbonGroups;
 
     /**
-     * Held strongly here so the weak registration on the singleton {@link AppState} lives exactly
-     * as long as this controller. A plain lambda would pin this slot's scene graph for the life of
-     * the application and keep a discarded ribbon loading groups.
+     * Held strongly here so the weak registration on the singleton {@link AppState} lives exactly as long as this
+     * controller. A plain lambda would pin this slot's scene graph for the life of the application and keep a discarded
+     * ribbon loading groups.
      */
     private final ChangeListener<Mode> modeListener = (obs, old, mode) -> showGroupFor(mode);
 
     /** The mode whose group is on screen, so a repeat of the same mode does not rebuild it. */
     private Mode displayedMode;
 
-    public ContextualGroupController(AppState appState,
-                                     ViewLoader viewLoader,
-                                     RibbonGroupRegistry ribbonGroups) {
+    public ContextualGroupController(AppState appState, ViewLoader viewLoader, RibbonGroupRegistry ribbonGroups)
+    {
         this.appState = appState;
         this.viewLoader = viewLoader;
         this.ribbonGroups = ribbonGroups;
     }
 
     @FXML
-    private void initialize() {
+    private void initialize()
+    {
         // Pin this controller to the node tree it drives. Without this the slot silently stops
         // swapping at some arbitrary later moment, and the failure looks like anything but a
         // lifetime problem.
@@ -99,40 +101,48 @@ public class ContextualGroupController {
         showGroupFor(appState.getCurrentMode());
     }
 
-    private void showGroupFor(Mode mode) {
-        if (mode == displayedMode) {
+    private void showGroupFor(Mode mode)
+    {
+        if (mode == displayedMode)
+        {
             return;
         }
         displayedMode = mode;
 
-        Optional<String> resource = mode == null
-                ? Optional.empty()
-                : ribbonGroups.groupFor(mode);
+        Optional<String> resource = mode == null ? Optional.empty() : ribbonGroups.groupFor(mode);
 
-        if (resource.isEmpty()) {
+        if (resource.isEmpty())
+        {
             // A mode with no contextual group is the normal case for SOAP and REST, not a failure.
             setContent(null);
             return;
         }
 
-        try {
+        try
+        {
             setContent(viewLoader.loadParent(resource.get()));
-        } catch (IOException | RuntimeException e) {
+        }
+        catch (IOException | RuntimeException e)
+        {
             // Deliberately not a dialog. A ribbon group failing to load is not worth a modal in
             // front of a window that is otherwise working, and this runs during shell construction
             // where an alert would arrive before there is anything to own it. FxmlSmokeTest loads
             // every one of these files through the real factory, so a broken group fails the build
             // rather than reaching a user.
-            LOG.log(System.Logger.Level.ERROR,
-                    "Could not load the " + mode + " ribbon group from " + resource.get(), e);
+            LOG.log(System.Logger.Level.ERROR, "Could not load the " + mode + " ribbon group from " + resource.get(),
+                    e);
             setContent(null);
         }
     }
 
-    private void setContent(Parent group) {
-        if (group == null) {
+    private void setContent(Parent group)
+    {
+        if (group == null)
+        {
             groupHost.getChildren().clear();
-        } else {
+        }
+        else
+        {
             groupHost.getChildren().setAll(group);
         }
         // An empty slot must not reserve width, or the ribbon shows a gap and the spacing between

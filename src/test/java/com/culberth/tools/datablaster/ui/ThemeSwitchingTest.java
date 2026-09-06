@@ -21,13 +21,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * The bar this feature had to clear.
  *
- * <p>Theme switching was removed from this project once already rather than shipped, because it
- * persisted a value nothing honoured. The requirement written for its return was that it changes
- * what the user sees <em>in every window that is already open</em> — not just the next one created.
- * That is the assertion below, and it is the one that would have failed the first time.
+ * <p>
+ * Theme switching was removed from this project once already rather than shipped, because it persisted a value nothing
+ * honoured. The requirement written for its return was that it changes what the user sees <em>in every window that is
+ * already open</em> — not just the next one created. That is the assertion below, and it is the one that would have
+ * failed the first time.
  */
 @SpringBootTest
-class ThemeSwitchingTest {
+class ThemeSwitchingTest
+{
 
     @Autowired
     private ViewLoader viewLoader;
@@ -36,24 +38,29 @@ class ThemeSwitchingTest {
     private AppState appState;
 
     @BeforeAll
-    static void startToolkit() {
+    static void startToolkit()
+    {
         HeadlessToolkit.start();
         HeadlessToolkit.onFxThread(AppState::markFxApplicationThread);
     }
 
     @AfterEach
-    void resetSharedState() {
+    void resetSharedState()
+    {
         HeadlessToolkit.onFxThread(() -> appState.setTheme(Theme.LIGHT));
     }
 
-    private static boolean hasTheme(Parent root, Theme theme) {
+    private static boolean hasTheme(Parent root, Theme theme)
+    {
         return root.getStyleClass().contains(theme.styleClass());
     }
 
     @Test
     @DisplayName("a scene is born with the current theme")
-    void aSceneIsBornWithTheCurrentTheme() {
-        HeadlessToolkit.onFxThread(() -> {
+    void aSceneIsBornWithTheCurrentTheme()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setTheme(Theme.DARK);
 
             Scene scene = viewLoader.newScene(viewLoader.loadParent("/fxml/preferences.fxml"));
@@ -65,19 +72,21 @@ class ThemeSwitchingTest {
     }
 
     /**
-     * The whole point. A window that is already on screen has to change; applying the theme only at
-     * scene creation is the failure mode that got this feature pulled before.
+     * The whole point. A window that is already on screen has to change; applying the theme only at scene creation is
+     * the failure mode that got this feature pulled before.
      */
     @Test
     @DisplayName("switching restyles a window that is already open")
-    void switchingRestylesAWindowThatIsAlreadyOpen() {
-        HeadlessToolkit.onFxThread(() -> {
+    void switchingRestylesAWindowThatIsAlreadyOpen()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Stage stage = new Stage();
             stage.setScene(viewLoader.newScene(viewLoader.loadParent("/fxml/main.fxml")));
             stage.show();
-            try {
-                assertTrue(hasTheme(stage.getScene().getRoot(), Theme.LIGHT),
-                        "should start on the light theme");
+            try
+            {
+                assertTrue(hasTheme(stage.getScene().getRoot(), Theme.LIGHT), "should start on the light theme");
 
                 appState.setTheme(Theme.DARK);
 
@@ -87,9 +96,10 @@ class ThemeSwitchingTest {
                         "the previous theme's class must be removed, not merely outranked");
 
                 appState.setTheme(Theme.LIGHT);
-                assertTrue(hasTheme(stage.getScene().getRoot(), Theme.LIGHT),
-                        "and back again");
-            } finally {
+                assertTrue(hasTheme(stage.getScene().getRoot(), Theme.LIGHT), "and back again");
+            }
+            finally
+            {
                 stage.close();
             }
         });
@@ -97,22 +107,26 @@ class ThemeSwitchingTest {
 
     @Test
     @DisplayName("every open window is restyled, not just the last one")
-    void everyOpenWindowIsRestyledNotJustTheLastOne() {
-        HeadlessToolkit.onFxThread(() -> {
+    void everyOpenWindowIsRestyledNotJustTheLastOne()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Stage shell = new Stage();
             shell.setScene(viewLoader.newScene(viewLoader.loadParent("/fxml/main.fxml")));
             shell.show();
             Stage dialog = new Stage();
             dialog.setScene(viewLoader.newScene(viewLoader.loadParent("/fxml/preferences.fxml")));
             dialog.show();
-            try {
+            try
+            {
                 appState.setTheme(Theme.DARK);
 
                 assertTrue(hasTheme(shell.getScene().getRoot(), Theme.DARK),
                         "the shell should follow even while a dialog is up");
-                assertTrue(hasTheme(dialog.getScene().getRoot(), Theme.DARK),
-                        "the dialog should follow too");
-            } finally {
+                assertTrue(hasTheme(dialog.getScene().getRoot(), Theme.DARK), "the dialog should follow too");
+            }
+            finally
+            {
                 dialog.close();
                 shell.close();
             }
@@ -120,19 +134,19 @@ class ThemeSwitchingTest {
     }
 
     /**
-     * The style class is only half of it — the tokens it selects have to reach the rules. This
-     * checks the stylesheet is attached at all, which is what makes {@code .root.theme-dark}
-     * resolve to anything.
+     * The style class is only half of it — the tokens it selects have to reach the rules. This checks the stylesheet is
+     * attached at all, which is what makes {@code .root.theme-dark} resolve to anything.
      */
     @Test
     @DisplayName("the themed scene carries the stylesheet the theme lives in")
-    void theThemedSceneCarriesTheStylesheetTheThemeLivesIn() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theThemedSceneCarriesTheStylesheetTheThemeLivesIn()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Scene scene = viewLoader.newScene(viewLoader.loadParent("/fxml/preferences.fxml"));
 
             assertEquals(1, scene.getStylesheets().size(), "exactly one stylesheet is expected");
-            assertTrue(scene.getStylesheets().get(0).endsWith("ribbon.css"),
-                    "got " + scene.getStylesheets());
+            assertTrue(scene.getStylesheets().get(0).endsWith("ribbon.css"), "got " + scene.getStylesheets());
         });
     }
 }

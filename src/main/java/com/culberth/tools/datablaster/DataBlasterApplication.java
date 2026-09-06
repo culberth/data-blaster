@@ -14,7 +14,8 @@ import javafx.stage.Stage;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
-public class DataBlasterApplication extends Application {
+public class DataBlasterApplication extends Application
+{
 
     private static final System.Logger LOG = System.getLogger(DataBlasterApplication.class.getName());
 
@@ -23,23 +24,25 @@ public class DataBlasterApplication extends Application {
     /**
      * Boots Spring before any window exists.
      *
-     * <p><strong>No try/catch here any more.</strong> This method used to catch a startup failure,
-     * check whether its most specific cause was a port conflict, and retry without the web layer —
-     * because an embedded Tomcat that could not bind its port would otherwise abort the launch and
-     * write its only diagnostic to a console the windowed build does not have. There is no embedded
-     * server now, so there is no port to conflict over and nothing left that a retry could fix. A
-     * failure here is a real bug and should propagate.
+     * <p>
+     * <strong>No try/catch here any more.</strong> This method used to catch a startup failure, check whether its most
+     * specific cause was a port conflict, and retry without the web layer — because an embedded Tomcat that could not
+     * bind its port would otherwise abort the launch and write its only diagnostic to a console the windowed build does
+     * not have. There is no embedded server now, so there is no port to conflict over and nothing left that a retry
+     * could fix. A failure here is a real bug and should propagate.
      */
     @Override
-    public void init() {
-        springContext = new SpringApplicationBuilder(AppConfig.class)
-                .headless(false)
+    public void init()
+    {
+        springContext = new SpringApplicationBuilder(AppConfig.class).headless(false)
                 .run(getParameters().getRaw().toArray(new String[0]));
     }
 
     @Override
-    public void start(Stage primaryStage) {
-        try {
+    public void start(Stage primaryStage)
+    {
+        try
+        {
             // Registered before the shell loads so that any bean — not just MainController — can
             // obtain a window owner.
             // Recorded here rather than probed via Platform.isFxApplicationThread(), which would
@@ -66,7 +69,9 @@ public class DataBlasterApplication extends Application {
             primaryStage.setMinWidth(640);
             primaryStage.setMinHeight(400);
             primaryStage.show();
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             // JavaFX only calls stop() when start() completed, so without this the already-booted
             // Spring context would be left open with no window ever appearing — and its shutdown
             // hooks, including the settings flush, would never run.
@@ -78,11 +83,11 @@ public class DataBlasterApplication extends Application {
     }
 
     /**
-     * The window/taskbar icon, drawn rather than loaded so the app carries no binary asset.
-     * Without it the app shows the generic Java icon and is indistinguishable in Alt-Tab from
-     * every other Java process.
+     * The window/taskbar icon, drawn rather than loaded so the app carries no binary asset. Without it the app shows
+     * the generic Java icon and is indistinguishable in Alt-Tab from every other Java process.
      */
-    private static WritableImage appIcon() {
+    private static WritableImage appIcon()
+    {
         int size = 64;
         Canvas canvas = new Canvas(size, size);
         GraphicsContext g = canvas.getGraphicsContext2D();
@@ -98,32 +103,40 @@ public class DataBlasterApplication extends Application {
         return canvas.snapshot(params, null);
     }
 
-    private void reportFatal(Throwable cause) {
-        try {
+    private void reportFatal(Throwable cause)
+    {
+        try
+        {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Data Blaster");
             alert.setHeaderText("Data Blaster could not start.");
             alert.setContentText(String.valueOf(cause.getMessage()));
             alert.showAndWait();
-        } catch (RuntimeException ignored) {
+        }
+        catch (RuntimeException ignored)
+        {
             // A failure this early can leave the toolkit unable to show a dialog; the log above
             // is then the only record, and suppressing this keeps the shutdown path intact.
         }
     }
 
     @Override
-    public void stop() {
+    public void stop()
+    {
         closeSpringContext();
     }
 
-    private void closeSpringContext() {
-        if (springContext != null) {
+    private void closeSpringContext()
+    {
+        if (springContext != null)
+        {
             springContext.close();
             springContext = null;
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args)
+    {
         launch(args);
     }
 }
