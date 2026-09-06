@@ -26,16 +26,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * The four mode views: that each names its mode, shows that mode's live configuration, and is
- * honest about having no behaviour.
+ * The four mode views: that each names its mode, shows that mode's live configuration, and is honest about having no
+ * behaviour.
  *
- * <p>These are still placeholders — no mode does anything, which is v1's stated boundary. What they
- * are not is <em>silent</em> placeholders. The read-outs are bound to {@link AppState}, so this
- * suite doubles as the end-to-end check that a setting written in the ribbon or in Preferences is
- * the same value a third, independent reader sees.
+ * <p>
+ * These are still placeholders — no mode does anything, which is v1's stated boundary. What they are not is
+ * <em>silent</em> placeholders. The read-outs are bound to {@link AppState}, so this suite doubles as the end-to-end
+ * check that a setting written in the ribbon or in Preferences is the same value a third, independent reader sees.
  */
 @SpringBootTest
-class ModeViewTest {
+class ModeViewTest
+{
 
     @Autowired
     private ViewLoader viewLoader;
@@ -47,14 +48,17 @@ class ModeViewTest {
     private ViewRegistry viewRegistry;
 
     @BeforeAll
-    static void startToolkit() {
+    static void startToolkit()
+    {
         HeadlessToolkit.start();
         HeadlessToolkit.onFxThread(AppState::markFxApplicationThread);
     }
 
     @AfterEach
-    void resetSharedState() {
-        HeadlessToolkit.onFxThread(() -> {
+    void resetSharedState()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             appState.setLogFolder(null);
             appState.setPlaybackSpeedFactor(Settings.PLAYBACK_SPEED_DEFAULT);
             appState.setPortTailMappings(List.of());
@@ -66,42 +70,46 @@ class ModeViewTest {
         });
     }
 
-    private Parent viewFor(Mode mode) throws java.io.IOException {
+    private Parent viewFor(Mode mode) throws java.io.IOException
+    {
         return viewLoader.loadParent(viewRegistry.resourceFor(mode));
     }
 
-    private static String textOf(Parent view, String id) {
+    private static String textOf(Parent view, String id)
+    {
         Label label = (Label) view.lookup("#" + id);
         assertNotNull(label, id + " should be in the view");
         return label.getText();
     }
 
     /**
-     * The rename is the point of this one. The registry used to map every mode to a
-     * {@code viewN.fxml} that said nothing about it, and a view showing the wrong mode's name is a
-     * mis-wiring no compiler catches.
+     * The rename is the point of this one. The registry used to map every mode to a {@code viewN.fxml} that said
+     * nothing about it, and a view showing the wrong mode's name is a mis-wiring no compiler catches.
      */
     @Test
     @DisplayName("every mode resolves to a view that names it")
-    void everyModeResolvesToAViewThatNamesIt() {
-        HeadlessToolkit.onFxThread(() -> {
-            for (Mode mode : Mode.values()) {
+    void everyModeResolvesToAViewThatNamesIt()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
+            for (Mode mode : Mode.values())
+            {
                 Parent view = viewFor(mode);
                 boolean namesItsMode = view.lookupAll(".mode-view-title").stream()
-                        .anyMatch(node -> node instanceof Label label
-                                && mode.toString().equals(label.getText()));
+                        .anyMatch(node -> node instanceof Label label && mode.toString().equals(label.getText()));
 
-                assertTrue(namesItsMode,
-                        mode + " resolves to " + viewRegistry.resourceFor(mode)
-                                + ", which does not have " + mode + " as its title");
+                assertTrue(namesItsMode, mode + " resolves to " + viewRegistry.resourceFor(mode)
+                        + ", which does not have " + mode + " as its title");
             }
         });
     }
 
     @Test
     @DisplayName("the Log view shows the folder, the speed and the mapping count, live")
-    void theLogViewShowsItsConfigurationLive() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theLogViewShowsItsConfigurationLive()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent view = viewFor(Mode.LOG);
             assertEquals("(none selected)", textOf(view, "logFolderValue"));
             assertEquals("none", textOf(view, "mappingCountValue"));
@@ -113,8 +121,7 @@ class ModeViewTest {
 
             // Bound, not assigned: the view was built before any of these were set.
             assertEquals(folder.getAbsolutePath(), textOf(view, "logFolderValue"));
-            assertTrue(textOf(view, "playbackSpeedValue").startsWith("2.50"),
-                    textOf(view, "playbackSpeedValue"));
+            assertTrue(textOf(view, "playbackSpeedValue").startsWith("2.50"), textOf(view, "playbackSpeedValue"));
             assertEquals("1 mapping", textOf(view, "mappingCountValue"));
 
             appState.addPortTailMapping(PortTailMapping.of(5002, "123456"));
@@ -125,8 +132,10 @@ class ModeViewTest {
 
     @Test
     @DisplayName("the Message view shows the type using the same display name the choosers do")
-    void theMessageViewShowsTheType() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theMessageViewShowsTheType()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent view = viewFor(Mode.MESSAGE);
 
             appState.setMessageType(MessageType.MESSAGE_3);
@@ -138,8 +147,10 @@ class ModeViewTest {
 
     @Test
     @DisplayName("the SOAP view shows its whole configuration, live")
-    void theSoapViewShowsItsConfigurationLive() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theSoapViewShowsItsConfigurationLive()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             Parent view = viewFor(Mode.SOAP);
             assertEquals("127.0.0.1", textOf(view, "ipValue"));
             assertEquals("none", textOf(view, "dataFileCountValue"));
@@ -164,14 +175,16 @@ class ModeViewTest {
     }
 
     /**
-     * REST is the one mode with nothing to show, and the note is the whole content of its view. A
-     * blank view would be indistinguishable from a broken one, which is exactly what shipping a
-     * visible toggle instead of a disabled one was meant to avoid.
+     * REST is the one mode with nothing to show, and the note is the whole content of its view. A blank view would be
+     * indistinguishable from a broken one, which is exactly what shipping a visible toggle instead of a disabled one
+     * was meant to avoid.
      */
     @Test
     @DisplayName("the REST view says plainly that it is not implemented")
-    void theRestViewSaysPlainlyThatItIsNotImplemented() {
-        HeadlessToolkit.onFxThread(() -> {
+    void theRestViewSaysPlainlyThatItIsNotImplemented()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
             String note = textOf(viewFor(Mode.REST), "notImplementedNote");
 
             assertTrue(note.toLowerCase().contains("not implemented"), note);
@@ -180,23 +193,24 @@ class ModeViewTest {
     }
 
     /**
-     * The views used to carry {@code style="-fx-font-size: 22px;"} inline — a literal the theme
-     * tokens could never reach, so the heading kept its light-theme colour when everything around
-     * it went dark. Style classes are what let {@code ThemeContrastTest} have any say over them.
+     * The views used to carry {@code style="-fx-font-size: 22px;"} inline — a literal the theme tokens could never
+     * reach, so the heading kept its light-theme colour when everything around it went dark. Style classes are what let
+     * {@code ThemeContrastTest} have any say over them.
      */
     @Test
     @DisplayName("no mode view styles itself with an inline literal")
-    void noModeViewStylesItselfWithAnInlineLiteral() {
-        HeadlessToolkit.onFxThread(() -> {
-            for (Mode mode : Mode.values()) {
+    void noModeViewStylesItselfWithAnInlineLiteral()
+    {
+        HeadlessToolkit.onFxThread(() ->
+        {
+            for (Mode mode : Mode.values())
+            {
                 Parent view = viewFor(mode);
                 assertTrue(view.getStyle().isBlank(), mode + " root carries an inline style");
-                view.lookupAll(".mode-view-title").forEach(node ->
-                        assertTrue(node.getStyle().isBlank(),
-                                mode + " title carries an inline style: " + node.getStyle()));
-                view.lookupAll(".mode-view-value").forEach(node ->
-                        assertTrue(node.getStyle().isBlank(),
-                                mode + " read-out carries an inline style: " + node.getStyle()));
+                view.lookupAll(".mode-view-title").forEach(node -> assertTrue(node.getStyle().isBlank(),
+                        mode + " title carries an inline style: " + node.getStyle()));
+                view.lookupAll(".mode-view-value").forEach(node -> assertTrue(node.getStyle().isBlank(),
+                        mode + " read-out carries an inline style: " + node.getStyle()));
             }
         });
     }

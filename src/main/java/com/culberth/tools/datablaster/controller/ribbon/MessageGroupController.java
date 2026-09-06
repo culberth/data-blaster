@@ -14,14 +14,16 @@ import org.springframework.stereotype.Component;
 /**
  * The "Message" ribbon group: the message type, shown only while Message mode is selected.
  *
- * <p>Populated from {@link MessageType#values()} rather than from a list in the FXML, so adding a
- * constant is a one-line change in the enum and nowhere else. The choices render through
- * {@code MessageType.toString()}, which is why that override exists — a {@code ChoiceBox} uses it
- * for both the list and the button, and one override keeps them from disagreeing.
+ * <p>
+ * Populated from {@link MessageType#values()} rather than from a list in the FXML, so adding a constant is a one-line
+ * change in the enum and nowhere else. The choices render through {@code MessageType.toString()}, which is why that
+ * override exists — a {@code ChoiceBox} uses it for both the list and the button, and one override keeps them from
+ * disagreeing.
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class MessageGroupController {
+public class MessageGroupController
+{
 
     @FXML
     private Label messageTypeCaption;
@@ -34,20 +36,22 @@ public class MessageGroupController {
     /**
      * Keeps the chooser in step when Preferences changes the type while this group exists.
      *
-     * <p>Held strongly so the weak registration on the singleton {@link AppState} lives exactly as
-     * long as this controller. The guard against writing back is the value comparison rather than a
-     * flag: setting a {@code ChoiceBox} to the value it already holds fires nothing, so the loop
-     * closes itself.
+     * <p>
+     * Held strongly so the weak registration on the singleton {@link AppState} lives exactly as long as this
+     * controller. The guard against writing back is the value comparison rather than a flag: setting a
+     * {@code ChoiceBox} to the value it already holds fires nothing, so the loop closes itself.
      */
-    private final ChangeListener<MessageType> typeListener =
-            (observable, old, type) -> messageTypeChoice.setValue(type);
+    private final ChangeListener<MessageType> typeListener = (observable, old, type) -> messageTypeChoice
+            .setValue(type);
 
-    public MessageGroupController(AppState appState) {
+    public MessageGroupController(AppState appState)
+    {
         this.appState = appState;
     }
 
     @FXML
-    private void initialize() {
+    private void initialize()
+    {
         // Set here, not in the FXML: labelFor="$messageTypeChoice" on the caption would be a
         // forward reference to an fx:id declared further down the file, which FXMLLoader resolves
         // to null without erroring — markup that asserts an association it does not make.
@@ -57,8 +61,10 @@ public class MessageGroupController {
 
         // Read AppState here, do not publish: this runs before the shell's initialize().
         messageTypeChoice.setValue(appState.getMessageType());
-        messageTypeChoice.valueProperty().addListener((observable, old, type) -> {
-            if (type != null) {
+        messageTypeChoice.valueProperty().addListener((observable, old, type) ->
+        {
+            if (type != null)
+            {
                 appState.setMessageType(type);
             }
         });

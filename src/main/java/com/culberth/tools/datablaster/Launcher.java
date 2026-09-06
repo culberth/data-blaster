@@ -1,16 +1,19 @@
 package com.culberth.tools.datablaster;
 
 /**
- * Separate entry point (does not extend {@link javafx.application.Application}) so the app
- * can be started from a repackaged Spring Boot fat jar without JavaFX's launcher checks
- * complaining about a missing "main class must not extend Application" setup.
+ * Separate entry point (does not extend {@link javafx.application.Application}) so the app can be started from a
+ * repackaged Spring Boot fat jar without JavaFX's launcher checks complaining about a missing "main class must not
+ * extend Application" setup.
  */
-public final class Launcher {
+public final class Launcher
+{
 
-    private Launcher() {
+    private Launcher()
+    {
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args)
+    {
         DataBlasterApplication.main(args);
     }
 }

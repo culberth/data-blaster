@@ -23,16 +23,18 @@ import org.springframework.stereotype.Component;
 /**
  * The General tab: the settings that belong to no mode, and where they all live on disk.
  *
- * <p>The theme, the Blast Port, Single Message and Byte Hijack. The last three are also in the
- * Global ribbon group; neither surface owns the value, and both read and write {@link AppState}.
+ * <p>
+ * The theme, the Blast Port, Single Message and Byte Hijack. The last three are also in the Global ribbon group;
+ * neither surface owns the value, and both read and write {@link AppState}.
  *
- * <p>The settings file path is here rather than under a mode because it answers "where did my
- * setting go" for every tab at once. The store is a plain properties file precisely so that path is
- * something a person can act on.
+ * <p>
+ * The settings file path is here rather than under a mode because it answers "where did my setting go" for every tab at
+ * once. The store is a plain properties file precisely so that path is something a person can act on.
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class GeneralTabController {
+public class GeneralTabController
+{
 
     @FXML
     private Label themeCaption;
@@ -64,33 +66,34 @@ public class GeneralTabController {
     private SpinnerValueFactory.IntegerSpinnerValueFactory blastPortFactory;
 
     /**
-     * Keeps the controls in step when these are changed elsewhere — the Global ribbon group edits
-     * the same three settings, and this tab's own Reset moves all four. A control that silently
-     * disagrees with the state behind it is the defect this whole dialog was reworked to avoid.
+     * Keeps the controls in step when these are changed elsewhere — the Global ribbon group edits the same three
+     * settings, and this tab's own Reset moves all four. A control that silently disagrees with the state behind it is
+     * the defect this whole dialog was reworked to avoid.
      *
-     * <p>Held strongly so the weak registrations on the singleton {@link AppState} live exactly as
-     * long as this controller. Setting a control to the value it already holds fires nothing, so
-     * each write-back loop closes itself with no re-entrancy flag.
+     * <p>
+     * Held strongly so the weak registrations on the singleton {@link AppState} live exactly as long as this
+     * controller. Setting a control to the value it already holds fires nothing, so each write-back loop closes itself
+     * with no re-entrancy flag.
      */
-    private final ChangeListener<Theme> themeListener =
-            (observable, old, theme) -> themeChoice.setValue(theme);
+    private final ChangeListener<Theme> themeListener = (observable, old, theme) -> themeChoice.setValue(theme);
 
-    private final ChangeListener<Number> blastPortListener =
-            (observable, old, port) -> blastPortFactory.setValue(port.intValue());
+    private final ChangeListener<Number> blastPortListener = (observable, old, port) -> blastPortFactory
+            .setValue(port.intValue());
 
-    private final ChangeListener<Boolean> singleMessageListener =
-            (observable, old, on) -> singleMessageCheck.setSelected(on);
+    private final ChangeListener<Boolean> singleMessageListener = (observable, old, on) -> singleMessageCheck
+            .setSelected(on);
 
-    private final ChangeListener<Boolean> byteHijackListener =
-            (observable, old, on) -> byteHijackCheck.setSelected(on);
+    private final ChangeListener<Boolean> byteHijackListener = (observable, old, on) -> byteHijackCheck.setSelected(on);
 
-    public GeneralTabController(AppState appState, SettingsStore settingsStore) {
+    public GeneralTabController(AppState appState, SettingsStore settingsStore)
+    {
         this.appState = appState;
         this.settingsStore = settingsStore;
     }
 
     @FXML
-    private void initialize() {
+    private void initialize()
+    {
         // Set here rather than in the FXML: labelFor="$themeChoice" would be a forward reference to
         // an fx:id declared further down the file, which FXMLLoader quietly resolves to null —
         // markup asserting an association it does not make.
@@ -108,49 +111,53 @@ public class GeneralTabController {
         // BooleanExpression.isEqualTo takes another observable, not a literal, so the two check
         // boxes would have to be written as not() — which reads as "is off" and is only equivalent
         // to "is default" while the default happens to be false.
-        resetButton.disableProperty().bind(Bindings.createBooleanBinding(
-                () -> appState.getTheme() == Settings.DEFAULTS.theme()
-                        && appState.getBlastPort() == Settings.DEFAULTS.blastPort()
-                        && appState.isSingleMessage() == Settings.DEFAULTS.singleMessage()
-                        && appState.isByteHijack() == Settings.DEFAULTS.byteHijack(),
-                appState.themeProperty(),
-                appState.blastPortProperty(),
-                appState.singleMessageProperty(),
-                appState.byteHijackProperty()));
+        resetButton.disableProperty()
+                .bind(Bindings.createBooleanBinding(
+                        () -> appState.getTheme() == Settings.DEFAULTS.theme()
+                                && appState.getBlastPort() == Settings.DEFAULTS.blastPort()
+                                && appState.isSingleMessage() == Settings.DEFAULTS.singleMessage()
+                                && appState.isByteHijack() == Settings.DEFAULTS.byteHijack(),
+                        appState.themeProperty(), appState.blastPortProperty(), appState.singleMessageProperty(),
+                        appState.byteHijackProperty()));
     }
 
-    private void initTheme() {
+    private void initTheme()
+    {
         themeChoice.getItems().setAll(Theme.values());
         themeChoice.setValue(appState.getTheme());
-        themeChoice.valueProperty().addListener((observable, old, theme) -> {
-            if (theme != null) {
+        themeChoice.valueProperty().addListener((observable, old, theme) ->
+        {
+            if (theme != null)
+            {
                 appState.setTheme(theme);
             }
         });
         appState.themeProperty().addListener(new WeakChangeListener<>(themeListener));
     }
 
-    private void initGlobalSettings() {
+    private void initGlobalSettings()
+    {
         blastPortFactory = PortSpinner.configure(blastPortSpinner, appState.getBlastPort());
-        blastPortSpinner.valueProperty().addListener((observable, old, port) -> {
-            if (port != null) {
+        blastPortSpinner.valueProperty().addListener((observable, old, port) ->
+        {
+            if (port != null)
+            {
                 appState.setBlastPort(port);
             }
         });
         appState.blastPortProperty().addListener(new WeakChangeListener<>(blastPortListener));
 
         singleMessageCheck.setSelected(appState.isSingleMessage());
-        singleMessageCheck.selectedProperty().addListener(
-                (observable, was, on) -> appState.setSingleMessage(on));
+        singleMessageCheck.selectedProperty().addListener((observable, was, on) -> appState.setSingleMessage(on));
         appState.singleMessageProperty().addListener(new WeakChangeListener<>(singleMessageListener));
 
         byteHijackCheck.setSelected(appState.isByteHijack());
-        byteHijackCheck.selectedProperty().addListener(
-                (observable, was, on) -> appState.setByteHijack(on));
+        byteHijackCheck.selectedProperty().addListener((observable, was, on) -> appState.setByteHijack(on));
         appState.byteHijackProperty().addListener(new WeakChangeListener<>(byteHijackListener));
     }
 
-    private void initSettingsFilePath() {
+    private void initSettingsFilePath()
+    {
         settingsFileLabel.setText(settingsStore.location().toString());
         // The path outruns the dialog easily, so the full text stays reachable when it ellipsizes.
         Tooltip tooltip = new Tooltip();
@@ -161,13 +168,14 @@ public class GeneralTabController {
     /**
      * Resets what this tab shows, and nothing else.
      *
-     * <p>No confirmation: none of these destroys anything a person typed at length. Putting a theme
-     * or a check box back is instantly visible and instantly undone, and a port is one number. The
-     * Log tab's reset asks first because it clears a table someone typed by hand, which is a
-     * different kind of act.
+     * <p>
+     * No confirmation: none of these destroys anything a person typed at length. Putting a theme or a check box back is
+     * instantly visible and instantly undone, and a port is one number. The Log tab's reset asks first because it
+     * clears a table someone typed by hand, which is a different kind of act.
      */
     @FXML
-    private void onResetToDefaults() {
+    private void onResetToDefaults()
+    {
         appState.setTheme(Settings.DEFAULTS.theme());
         appState.setBlastPort(Settings.DEFAULTS.blastPort());
         appState.setSingleMessage(Settings.DEFAULTS.singleMessage());

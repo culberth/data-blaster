@@ -33,6 +33,7 @@
           unresolvable ${javafx.platform} classifier and no hint that profile activation was why.
         -->
         <javafx.platform>linux</javafx.platform>
+		<java-formatter-maven-plugin.version>1.0.1</java-formatter-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -121,6 +122,19 @@
 
     <build>
         <plugins>
+			<plugin>
+			  <groupId>io.github.culberth</groupId>
+			  <artifactId>java-formatter-maven-plugin</artifactId>
+			  <version>${java-formatter-maven-plugin.version}</version>
+			  <executions>
+				<execution>
+				  <id>format-sources</id>
+				  <goals>
+					<goal>format</goal>
+				  </goals>
+				</execution>
+			  </executions>
+			</plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

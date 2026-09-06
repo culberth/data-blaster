@@ -10,10 +10,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class AboutController {
+public class AboutController
+{
 
     @FXML
-    private void onClose(ActionEvent event) {
+    private void onClose(ActionEvent event)
+    {
         Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
         stage.close();
     }

@@ -12,13 +12,13 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 /**
- * The "Mode" ribbon group: the mode switcher. Publishes the chosen {@link Mode} to
- * {@link AppState}; the shell observes that and performs the view swap, so this group never touches
- * the content area.
+ * The "Mode" ribbon group: the mode switcher. Publishes the chosen {@link Mode} to {@link AppState}; the shell observes
+ * that and performs the view swap, so this group never touches the content area.
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class ModeGroupController {
+public class ModeGroupController
+{
 
     @FXML
     private ToggleGroup modeGroup;
@@ -26,23 +26,27 @@ public class ModeGroupController {
     private final AppState appState;
 
     /**
-     * Held strongly here so the weak registration on the singleton {@link AppState} lives exactly
-     * as long as this controller. A plain lambda would pin this group's scene graph for the life
-     * of the application and keep a discarded ribbon reacting to mode changes.
+     * Held strongly here so the weak registration on the singleton {@link AppState} lives exactly as long as this
+     * controller. A plain lambda would pin this group's scene graph for the life of the application and keep a
+     * discarded ribbon reacting to mode changes.
      */
     private final ChangeListener<Mode> modeListener = (obs, old, mode) -> select(mode);
 
-    public ModeGroupController(AppState appState) {
+    public ModeGroupController(AppState appState)
+    {
         this.appState = appState;
     }
 
     @FXML
-    private void initialize() {
+    private void initialize()
+    {
         // ToggleButton.fire() toggles even inside a ToggleGroup (unlike RadioButton), so clicking
         // the already-selected mode would clear the selection while still switching to that mode,
         // leaving the ribbon with nothing highlighted. Put the selection back.
-        modeGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
-            if (newToggle == null && oldToggle != null) {
+        modeGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) ->
+        {
+            if (newToggle == null && oldToggle != null)
+            {
                 modeGroup.selectToggle(oldToggle);
             }
         });
@@ -58,16 +62,21 @@ public class ModeGroupController {
     }
 
     @FXML
-    private void onModeSelected() {
+    private void onModeSelected()
+    {
         Toggle selected = modeGroup.getSelectedToggle();
-        if (selected != null) {
+        if (selected != null)
+        {
             appState.setCurrentMode(modeOf(selected));
         }
     }
 
-    private void select(Mode mode) {
-        for (Toggle toggle : modeGroup.getToggles()) {
-            if (modeOf(toggle) == mode) {
+    private void select(Mode mode)
+    {
+        for (Toggle toggle : modeGroup.getToggles())
+        {
+            if (modeOf(toggle) == mode)
+            {
                 modeGroup.selectToggle(toggle);
                 return;
             }
@@ -75,26 +84,32 @@ public class ModeGroupController {
     }
 
     /**
-     * The mode a toggle stands for, carried in its {@code userData} so the button-to-mode mapping
-     * is declared in the FXML rather than hardcoded in four handler methods.
+     * The mode a toggle stands for, carried in its {@code userData} so the button-to-mode mapping is declared in the
+     * FXML rather than hardcoded in four handler methods.
      *
-     * <p>The {@code userData} is the constant's name, which is a string in the markup and therefore
-     * the one half of this wiring the compiler cannot check. {@code ModeGroupViewIdTest} reads the
-     * FXML and asserts each value parses, so a typo fails the build rather than the button.
+     * <p>
+     * The {@code userData} is the constant's name, which is a string in the markup and therefore the one half of this
+     * wiring the compiler cannot check. {@code ModeGroupViewIdTest} reads the FXML and asserts each value parses, so a
+     * typo fails the build rather than the button.
      */
-    private static Mode modeOf(Toggle toggle) {
+    private static Mode modeOf(Toggle toggle)
+    {
         Object declared = toggle.getUserData();
-        if (declared == null) {
+        if (declared == null)
+        {
             throw new IllegalStateException("A Mode toggle is missing its userData mode name");
         }
-        try {
+        try
+        {
             return Mode.valueOf(declared.toString());
-        } catch (IllegalArgumentException unknown) {
+        }
+        catch (IllegalArgumentException unknown)
+        {
             // Deliberately not Mode.fromStoredName's tolerant fallback: that exists for a
             // hand-edited settings file, where recovering beats failing a launch. This is the
             // application's own markup, where a wrong value is a defect to surface, not absorb.
-            throw new IllegalStateException(
-                    "A Mode toggle declares userData '" + declared + "', which is not a Mode", unknown);
+            throw new IllegalStateException("A Mode toggle declares userData '" + declared + "', which is not a Mode",
+                    unknown);
         }
     }
 }
