@@ -34,6 +34,44 @@
         -->
         <javafx.platform>linux</javafx.platform>
 		<java-formatter-maven-plugin.version>1.0.1</java-formatter-maven-plugin.version>
+
+        <!--
+          Named once rather than written out at each use: spring-boot-maven-plugin's repackage
+          (which stamps it into the fat jar's Start-Class) and exec-maven-plugin's `mvn exec:java`
+          both need it, and a packaged app-image that disagreed with the jar would fail only at
+          launch.
+        -->
+        <app.mainClass>com.culberth.tools.datablaster.Launcher</app.mainClass>
+
+        <!--
+          jpackage app-image settings. The four executions that use them are declared in
+          build/plugins below and bound to ${jpackage.phase} - `none` here, `verify` in the
+          app-image profiles at the bottom of this file. That indirection is what keeps a plain
+          `mvn verify` from packaging anything: the executions exist unconditionally so the two
+          variants can share one argument list, but nothing binds them to a real phase until a
+          profile is asked for by name.
+        -->
+        <jpackage.phase>none</jpackage.phase>
+        <jpackage.variant>windowed</jpackage.variant>
+        <!--
+          Not ${project.artifactId}: the artifact is `data-blaster` and the app is `DataBlaster`.
+          The difference is deliberate, and dist\...\DataBlaster.exe is a contracted path.
+        -->
+        <jpackage.appName>DataBlaster</jpackage.appName>
+        <!--
+          javafx.controls/javafx.fxml are what the UI needs. The five java.* modules after them
+          were added for the embedded Tomcat servlet container, which this project no longer has.
+
+          They are deliberately still listed. Some are plausibly still required by the Spring
+          context alone (java.instrument for LoadTimeWeaver support, java.naming and java.sql for
+          types spring-core references), and java.security.jgss almost certainly is not. But a
+          module missing from a jpackage image fails with NoClassDefFoundError when the packaged
+          .exe is launched, not when it is built - and packaging is a manual Windows step that CI
+          never runs, so a wrong trim would stay invisible until someone ran the shipped app.
+          Narrowing this list means building both variants and actually launching them; until
+          someone does that, the cost of keeping them is a slightly larger runtime image.
+        -->
+        <jpackage.addModules>javafx.controls,javafx.fxml,java.management,java.naming,java.instrument,java.sql,java.security.jgss</jpackage.addModules>
     </properties>
 
     <dependencies>
@@ -118,6 +156,65 @@
                 <javafx.platform>linux</javafx.platform>
             </properties>
         </profile>
+
+        <!--
+          jpackage app-image packaging, bundling a JRE so no separate Java install is needed:
+
+              mvn -Papp-image clean verify          -> dist/windowed/DataBlaster/DataBlaster.exe
+              mvn -Papp-image-console clean verify  -> dist/console/DataBlaster/DataBlaster.exe
+
+          Windows-only and a manual step, deliberately not run in CI. Both are opt-in by name;
+          neither is activated by anything. The console variant exists for diagnosis - the windowed
+          launcher has no stderr, so a start-up failure there is otherwise invisible.
+
+          Neither profile carries any of the work. The executions live in build/plugins above and
+          these supply only the properties those executions read, which is what lets both variants
+          share one jpackage argument list.
+        -->
+        <profile>
+            <id>app-image</id>
+            <properties>
+                <!--
+                  Packaging has always skipped the suite; running the tests is `mvn test`, its own
+                  step. Scoped to the profile, so an ordinary build still runs everything.
+                -->
+                <skipTests>true</skipTests>
+                <jpackage.phase>verify</jpackage.phase>
+                <jpackage.variant>windowed</jpackage.variant>
+            </properties>
+        </profile>
+        <profile>
+            <id>app-image-console</id>
+            <properties>
+                <skipTests>true</skipTests>
+                <jpackage.phase>verify</jpackage.phase>
+                <jpackage.variant>console</jpackage.variant>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>jpackage</id>
+                                <configuration>
+                                    <!--
+                                      Appended to the shared argument list rather than restating
+                                      it. The console variant differs from the windowed one by this
+                                      single flag, and a second copy of the list would drift from
+                                      the first the next time an argument changed.
+                                    -->
+                                    <arguments combine.children="append">
+                                        <argument>--win-console</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <build>
@@ -139,7 +236,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.culberth.tools.datablaster.Launcher</mainClass>
+                    <mainClass>${app.mainClass}</mainClass>
                 </configuration>
                 <executions>
                     <execution>
@@ -164,13 +261,181 @@
                     <runOrder>alphabetical</runOrder>
                 </configuration>
             </plugin>
+            <!--
+              The four plugins below, together with exec-maven-plugin's `jpackage` execution, are
+              the whole of the app-image build. Their order here matters: executions sharing a
+              phase run in the order their plugins are declared, and this one is parse-version,
+              then clean, then the module path, then the staged jar, then jpackage itself.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!--
+                          jpackage rejects 1.0.0-SNAPSHOT: its app-version option takes numeric segments
+                          only. Maven has no string operations, so parse-version splits the version
+                          into ${parsedVersion.*} components that can be recombined without the
+                          qualifier.
+                        -->
+                        <id>parse-app-version</id>
+                        <phase>${jpackage.phase}</phase>
+                        <goals>
+                            <goal>parse-version</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>clean-app-image</id>
+                        <phase>${jpackage.phase}</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                        <configuration>
+                            <!--
+                              Without this the goal would also delete target/ - at `verify`, which
+                              is after the jar it is about to package has been built.
+                            -->
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <filesets>
+                                <!--
+                                  Scoped to one variant. dist/ sits outside target/ precisely so
+                                  building one variant does not destroy the other's already-built
+                                  image, and a fileset covering all of dist/ would undo that.
+                                  jpackage refuses to write into a directory that already exists,
+                                  so something has to clear it.
+                                -->
+                                <fileset>
+                                    <directory>${project.basedir}/dist/${jpackage.variant}</directory>
+                                </fileset>
+                                <fileset>
+                                    <directory>${project.build.directory}/jpackage-input</directory>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!--
+                          jlink cannot read modules out of a Spring Boot fat jar's BOOT-INF/lib, so
+                          jpackage needs the JavaFX jars unpacked somewhere it can address.
+                          Resolved rather than assembled by hand: javafx-base and javafx-graphics
+                          are transitive here (only controls and fxml are declared above), so a
+                          literal list would have to know which four modules to name, which
+                          classifier they carry, and where the local repository lives.
+                        -->
+                        <id>copy-fx-modules</id>
+                        <phase>${jpackage.phase}</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/fx-modules</outputDirectory>
+                            <includeGroupIds>org.openjfx</includeGroupIds>
+                            <!--
+                              Not optional. Resolution also brings three ~300-byte classifier-less
+                              stubs (javafx-graphics-21.0.2.jar and friends) holding a manifest and
+                              nothing else. On a module path those become automatic modules named
+                              javafx.graphics/base/controls, colliding with the real modules inside
+                              the platform jars, and jlink fails with "module found in two
+                              locations".
+                            -->
+                            <includeClassifiers>${javafx.platform}</includeClassifiers>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!--
+                          jpackage copies its entire input directory into the app image, so stage
+                          just the runnable jar rather than pointing it at all of target/ (classes,
+                          surefire reports, the .jar.original). The include is an exact name, never
+                          a glob: adding maven-source-plugin would otherwise let '...-sources.jar'
+                          be picked up as the main jar, giving an exe that fails with "Failed to
+                          launch JVM".
+                        -->
+                        <id>stage-jpackage-input</id>
+                        <phase>${jpackage.phase}</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/jpackage-input</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>${project.build.finalName}.jar</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.3.0</version>
                 <configuration>
-                    <mainClass>com.culberth.tools.datablaster.Launcher</mainClass>
+                    <mainClass>${app.mainClass}</mainClass>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>jpackage</id>
+                        <phase>${jpackage.phase}</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <!--
+                              Not a bare `jpackage` off the PATH: this pins the tool to the same
+                              JDK Maven is running on, so the runtime image bundled into the app
+                              cannot silently come from a different Java than the one that built
+                              the classes.
+                            -->
+                            <executable>${java.home}/bin/jpackage</executable>
+                            <arguments>
+                                <argument>--type</argument>
+                                <argument>app-image</argument>
+                                <argument>--input</argument>
+                                <argument>${project.build.directory}/jpackage-input</argument>
+                                <argument>--dest</argument>
+                                <argument>${project.basedir}/dist/${jpackage.variant}</argument>
+                                <argument>--name</argument>
+                                <argument>${jpackage.appName}</argument>
+                                <argument>--app-version</argument>
+                                <argument>${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.incrementalVersion}</argument>
+                                <argument>--vendor</argument>
+                                <argument>${project.groupId}</argument>
+                                <argument>--description</argument>
+                                <argument>${project.description}</argument>
+                                <argument>--main-jar</argument>
+                                <argument>${project.build.finalName}.jar</argument>
+                                <argument>--module-path</argument>
+                                <argument>${project.build.directory}/fx-modules</argument>
+                                <argument>--add-modules</argument>
+                                <argument>${jpackage.addModules}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

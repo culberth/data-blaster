@@ -132,6 +132,11 @@ dialog, and the `jpackage` script and its output paths.
 | Status payload `app` field | `JFXRibbon` | `Data Blaster` |
 | jpackage script + output | `Build-JFXRibbonAppImage.ps1`, `dist\…\JFXRibbon.exe` | `Build-DataBlasterAppImage.ps1`, `dist\…\DataBlaster.exe` |
 
+The table records the rename as it was carried out. `Build-DataBlasterAppImage.ps1` has since been
+deleted — the `jpackage` invocation moved into `pom.xml` (`-Papp-image` / `-Papp-image-console`),
+with `scripts/build-windowed.ps1` and `build-console.ps1` kept as wrappers. The output path the
+requirement actually contracts, `dist\…\DataBlaster.exe`, is unchanged.
+
 **The display name has a space; the directory and executable names do not.** A path with a space in
 it is legal and works, but it is an irritation in every script, shortcut and command line that ever
 touches it, and it is far cheaper to decide now than to migrate a settings directory later.

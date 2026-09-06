@@ -865,14 +865,46 @@ commitment than this project has made.
 
 - `mvn clean package` — jar plus Spring Boot fat jar
 - `mvn exec:java` / `mvn spring-boot:run` — run in place
-- `scripts/build-windowed.ps1` / `build-console.ps1` — `jpackage` app-images under `dist/`
+- `mvn -Papp-image clean verify` / `-Papp-image-console` — `jpackage` app-images under `dist/`
+- `scripts/build-windowed.ps1` / `build-console.ps1` — wrappers over those two commands
 
 The console variant exists for diagnosis: the windowed launcher has no stderr, so a startup failure
 there is invisible without it.
 
+**Packaging is a Maven concern, not a script's.** The `jpackage` invocation used to live in
+`scripts/Build-DataBlasterAppImage.ps1`, which had to reach back into Maven to do its job: it ran
+`mvn package`, then made six `mvn help:evaluate` sub-invocations to read the version, artifactId,
+JavaFX version and local repository location back out, and assembled `--module-path` by
+concatenating filenames into the local repository by hand. That last part bypassed dependency
+resolution entirely — it hardcoded all four JavaFX modules although the pom declares only two, and
+hardcoded the `win` classifier — so it would have broken silently on a JavaFX version bump. In the
+pom those values simply interpolate, and the module path comes from
+`maven-dependency-plugin:copy-dependencies`.
+
+Four things about that arrangement are load-bearing:
+
+- **The executions are declared unconditionally but bound to `${jpackage.phase}`**, which is `none`
+  in `properties` and `verify` in the two profiles. That is what lets both variants share one
+  argument list while a plain `mvn verify` still packages nothing. Giving them a literal phase
+  would package on every build; putting them inside the profiles would mean two copies of the
+  argument list, and the console one differs from the windowed one by a single flag.
+- **`copy-dependencies` must filter on the classifier.** Resolution also brings three ~300-byte
+  classifier-less stubs (`javafx-graphics-21.0.2.jar` and friends) holding a manifest and nothing
+  else. On a module path those become automatic modules named `javafx.graphics`/`base`/`controls`,
+  colliding with the real modules in the platform jars, and jlink fails with "module found in two
+  locations".
+- **The extra `maven-clean-plugin` execution needs `excludeDefaultDirectories`**, or it would
+  delete `target/` at `verify` — after the jar it is about to package was built. Its filesets name
+  one variant, because `dist/` sits outside `target/` precisely so building one variant does not
+  destroy the other's image.
+- **The staged jar is matched by exact name, never a glob.** jpackage copies its whole input
+  directory into the image, so only the runnable jar is staged; and adding `maven-source-plugin`
+  would otherwise let `...-sources.jar` be picked as the main jar, giving an exe that fails with
+  "Failed to launch JVM".
+
 `--add-modules` is a hand-maintained list found empirically. Five of its entries were added for the
 embedded Tomcat that no longer exists and are deliberately still there: a module missing from the
-image fails at native launch rather than at build time, and this script is a manual Windows step CI
+image fails at native launch rather than at build time, and packaging is a manual Windows step CI
 never runs, so a wrong trim would stay invisible until someone ran the shipped app. Narrowing it
 means building both variants and launching them. Recovery from any such failure is to run the
 console variant and read the stack trace. Packaging is Windows-only; both are accepted limits.

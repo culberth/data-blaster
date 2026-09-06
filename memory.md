@@ -86,10 +86,23 @@ favour of a log-scaled ribbon slider.
 - `ribbon.css` uses design tokens, never hex literals — `ThemeContrastTest` parses the stylesheet.
 - **"JFXRibbon" is gone; "ribbon" stays.** The app still has a ribbon: `ribbon.css`, the `-jfx-*`
   tokens, `controller.ribbon`, `fxml/ribbon/` and the `ribbon-*` style classes are all correct.
-- `jpackage` is a manual Windows step, deliberately not in CI.
+- `jpackage` is a manual Windows step, deliberately not in CI. It is driven from `pom.xml`
+  (`-Papp-image` / `-Papp-image-console`); `scripts/build-*.ps1` are wrappers over those.
+  The executions are bound to `${jpackage.phase}`, which is `none` outside those profiles —
+  that indirection is what keeps a plain `mvn verify` from packaging anything.
 - Spring Boot 4.1 is maintained to 31 July 2027. A fork intended to ship must plan to move again.
 
 ## Log
+- 2026-09-06 — **Moved the `jpackage` call out of PowerShell and into `pom.xml`.** The script had
+  to reach back into Maven to work: `mvn package`, then six `mvn help:evaluate` sub-invocations for
+  the version/artifactId/JavaFX version/local repository, then a `--module-path` assembled by
+  concatenating filenames into the local repository — bypassing dependency resolution, hardcoding
+  all four JavaFX modules though the pom declares two, and hardcoding the `win` classifier. Now two
+  opt-in profiles drive four plugin executions plus `exec:exec`; `scripts/build-windowed.ps1` and
+  `build-console.ps1` survive as wrappers and `Build-DataBlasterAppImage.ps1` is deleted. Both
+  images rebuilt and launched: `DataBlaster.cfg` and `runtime/release` are byte-identical to the
+  pre-change ones, and the PE subsystem still differs (2 windowed / 3 console), so `--win-console`
+  still lands. `mvn clean package` is unchanged — 342 tests, no `dist/` written.
 - 2026-08-29 — Rewrote `docs/PRD.md` from scratch. The previous PRD described a Maven archetype
   generator; **that idea was abandoned, not built.** References to archetypes, Velocity templating or
   `archetype-metadata.xml` anywhere are stale.

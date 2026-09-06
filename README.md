@@ -56,6 +56,19 @@ scripts/build-console.ps1
 The console variant exists for diagnosis: the windowed launcher has no stderr, so a start-up failure
 there is otherwise invisible. Output lands in `dist/`.
 
+Both scripts are wrappers. The `jpackage` call itself is in `pom.xml`, under two opt-in profiles,
+and can be run directly:
+
+```bash
+mvn -Papp-image clean verify
+```
+
+```bash
+mvn -Papp-image-console clean verify
+```
+
+Packaging skips the test suite, as it always has — `mvn test` is its own step.
+
 ## Settings
 
 A UTF-8 properties file at the per-user config location — `%APPDATA%\DataBlaster\settings.properties`

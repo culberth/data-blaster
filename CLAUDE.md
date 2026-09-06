@@ -65,10 +65,16 @@ mvn spring-boot:run
 # or
 mvn exec:java
 
-# Windows jpackage app-image builds (manual, not run in CI)
-scripts/build-windowed.ps1   # dist/windowed/DataBlaster/DataBlaster.exe — no console
-scripts/build-console.ps1    # dist/console/DataBlaster/DataBlaster.exe — console attached, for diagnosing startup failures
+# Windows jpackage app-image builds (manual, not run in CI). The scripts are wrappers;
+# the jpackage call is in pom.xml, under these two opt-in profiles.
+scripts/build-windowed.ps1   # = mvn -Papp-image clean verify          -> dist/windowed/DataBlaster/DataBlaster.exe — no console
+scripts/build-console.ps1    # = mvn -Papp-image-console clean verify  -> dist/console/DataBlaster/DataBlaster.exe — console attached, for diagnosing startup failures
 ```
+
+Packaging is driven by `${jpackage.phase}`: the executions are declared unconditionally in
+`build/plugins` so both variants share one argument list, but that property is `none` until an
+`app-image` profile sets it to `verify`. A plain `mvn verify` therefore packages nothing. Do not
+give those executions a literal phase — that is the only thing keeping them off the normal build.
 
 Surefire's `runOrder` is pinned to `alphabetical` in `pom.xml` — do not remove this. The default
 (`filesystem`) differs between Windows and Linux, which previously let a test-ordering/shared-state
