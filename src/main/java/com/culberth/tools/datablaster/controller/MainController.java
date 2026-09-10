@@ -27,6 +27,8 @@ import org.springframework.stereotype.Component;
 public class MainController
 {
 
+    private static final System.Logger LOG = System.getLogger(MainController.class.getName());
+
     @FXML
     private VBox contentArea;
 
@@ -79,7 +81,11 @@ public class MainController
     @FXML
     private void onPreferences()
     {
+        // The start of the trace. showModal blocks, so the next line runs only once the dialog has
+        // been dismissed — which is what makes the pair of them a usable open/close bracket.
+        LOG.log(System.Logger.Level.DEBUG, "Edit > Preferences selected");
         dialogService.showModal("/fxml/preferences.fxml", "Preferences");
+        LOG.log(System.Logger.Level.DEBUG, "Preferences dismissed; back in the shell");
     }
 
     // --- Menu: Help ---

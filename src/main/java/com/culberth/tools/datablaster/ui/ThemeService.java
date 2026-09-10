@@ -43,6 +43,17 @@ import org.springframework.stereotype.Component;
 public class ThemeService
 {
 
+    /**
+     * Traces the seam this class exists for.
+     *
+     * <p>
+     * Both failures in its history are invisible from the outside — the stored theme looks right and the screen does
+     * not follow. These messages name every root that was re-styled and every one that was dropped, on every change, so
+     * "the second switch did nothing" can be told apart from "the second switch reached a root that is no longer on
+     * screen". Enable them with {@code logging.level.com.culberth.tools.datablaster=DEBUG}.
+     */
+    private static final System.Logger LOG = System.getLogger(ThemeService.class.getName());
+
     private final AppState appState;
 
     /** Every root themed so far, weakly, most recent last. */
@@ -76,6 +87,8 @@ public class ThemeService
         // Registered on construction rather than from a start-up call: there is no ordering to get
         // right — nothing has been themed yet — and one less thing for start-up to remember.
         appState.themeProperty().addListener(themeListener);
+        LOG.log(System.Logger.Level.DEBUG,
+                () -> "ThemeService " + id(this) + " subscribed to the theme; it starts at " + appState.getTheme());
     }
 
     /**
@@ -87,13 +100,23 @@ public class ThemeService
      */
     public void applyTo(Parent root)
     {
-        setThemeClass(root, appState.getTheme());
+        Theme current = appState.getTheme();
+        // Logged before the class is set, so a scene that is born with the wrong theme is
+        // distinguishable from one that was never handed here at all.
+        LOG.log(System.Logger.Level.DEBUG, () -> "applyTo: theming new root " + id(root) + " as " + current);
+        setThemeClass(root, current);
         remember(root);
     }
 
     private void reapplyToAll()
     {
         Theme current = appState.getTheme();
+        // That this line appears at all is half of what the trace is for: written as a
+        // ChangeListener, it was logged on the first switch of a session and never again.
+        LOG.log(System.Logger.Level.DEBUG,
+                () -> "reapplyToAll: theme is now " + current + "; " + themedRoots.size() + " root(s) tracked");
+        int restyled = 0;
+        int dropped = 0;
         for (Iterator<WeakReference<Parent>> it = themedRoots.iterator(); it.hasNext();)
         {
             Parent root = it.next().get();
@@ -101,12 +124,19 @@ public class ThemeService
             {
                 // Collected since it was themed — a dialog that has been dismissed.
                 it.remove();
+                dropped++;
             }
             else
             {
+                LOG.log(System.Logger.Level.DEBUG, () -> "reapplyToAll: restyling root " + id(root) + " as " + current);
                 setThemeClass(root, current);
+                restyled++;
             }
         }
+        int restyledCount = restyled;
+        int droppedCount = dropped;
+        LOG.log(System.Logger.Level.DEBUG, () -> "reapplyToAll: restyled " + restyledCount + " root(s), dropped "
+                + droppedCount + " collected since the last change");
     }
 
     private static void setThemeClass(Parent root, Theme theme)
@@ -127,15 +157,36 @@ public class ThemeService
             Parent existing = it.next().get();
             if (existing == null)
             {
+                // Where a closed dialog is usually seen to go: opening the next one sweeps the
+                // list, so the tracked count drops here rather than at the next theme change.
+                LOG.log(System.Logger.Level.DEBUG, "remember: dropped a root collected since it was themed");
                 it.remove();
             }
             else if (existing == root)
             {
                 // Already tracked. Re-theming the same root — which ViewLoader does not do today,
                 // but a fork might — must not add a second entry.
+                LOG.log(System.Logger.Level.DEBUG, () -> "remember: root " + id(root) + " is already tracked");
                 return;
             }
         }
         themedRoots.add(new WeakReference<>(root));
+        // A reopened dialog is a different object from the one that was closed, so this count is
+        // what shows whether the closed one has been collected yet or is still on the list.
+        LOG.log(System.Logger.Level.DEBUG,
+                () -> "remember: now tracking root " + id(root) + " (" + themedRoots.size() + " root(s) tracked)");
+    }
+
+    /**
+     * A short identity for something in the scene graph.
+     *
+     * <p>
+     * Which root is which is the whole question once a dialog has been closed and reopened: the second Preferences
+     * window is a different object with the same class and the same contents, and a message saying only "a root" could
+     * not tell the two apart.
+     */
+    private static String id(Object o)
+    {
+        return o.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(o));
     }
 }

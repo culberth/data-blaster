@@ -13,7 +13,7 @@ The class that selects between them is applied by [ThemeService](https://claude.
 
 If you want to control the "Home" label directly rather than inherit modena's, add a rule keyed to a token — e.g. `.ribbon .tab .tab-label { -fx-text-fill: -jfx-text-secondary; }` plus a `:selected` variant using `-jfx-text` — rather than a hex literal; `ThemeContrastTest` parses the token blocks and hardcoded colors outside them will sit outside its contrast checks.
 
-Hypothetically, if when we switched to Dark and the text "Home" was not visible, what would I look for?
+## Hypothetically, if when we switched to Dark and the text "Home" was not visible, what would I look for?
 
 Good hypothetical — and this repo has a specific trap that would let exactly that ship green. Here's the triage order I'd use.
 

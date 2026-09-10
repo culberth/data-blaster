@@ -157,8 +157,17 @@ public class SettingsService
 
         // Only submit a task when nothing is already queued. If a write is outstanding it has not
         // read the buffer yet, or it is about to be re-submitted below by the task that drains it.
-        if (pending.getAndSet(settings) == null)
+        if (pending.getAndSet(settings) != null)
         {
+            // The second theme switch of a session often lands here rather than queueing a task of
+            // its own — one disk write covering both. A trace that logged only the queueing branch
+            // would read as though the change had been dropped.
+            LOG.log(System.Logger.Level.DEBUG,
+                    () -> "scheduleWrite: coalesced into the outstanding write; theme=" + settings.theme());
+        }
+        else
+        {
+            LOG.log(System.Logger.Level.DEBUG, () -> "scheduleWrite: queued a write; theme=" + settings.theme());
             try
             {
                 writer.execute(this::drain);

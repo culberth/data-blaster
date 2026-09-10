@@ -36,6 +36,13 @@ import org.springframework.stereotype.Component;
 public class GeneralTabController
 {
 
+    /**
+     * Traces the theme's round trip through this tab: the choice box writing to {@link AppState}, and {@link AppState}
+     * writing back. Both directions are logged because the write-back is what closes the loop — and that it closes
+     * silently, by setting a value already set, is why no re-entrancy flag is needed here.
+     */
+    private static final System.Logger LOG = System.getLogger(GeneralTabController.class.getName());
+
     @FXML
     private Label themeCaption;
 
@@ -75,7 +82,13 @@ public class GeneralTabController
      * controller. Setting a control to the value it already holds fires nothing, so each write-back loop closes itself
      * with no re-entrancy flag.
      */
-    private final ChangeListener<Theme> themeListener = (observable, old, theme) -> themeChoice.setValue(theme);
+    private final ChangeListener<Theme> themeListener = (observable, old, theme) ->
+    {
+        LOG.log(System.Logger.Level.DEBUG,
+                () -> "General tab " + id(this) + ": AppState theme is " + theme + "; writing it back to the choice box"
+                        + (themeChoice.getValue() == theme ? " (already showing it, so this fires nothing)" : ""));
+        themeChoice.setValue(theme);
+    };
 
     private final ChangeListener<Number> blastPortListener = (observable, old, port) -> blastPortFactory
             .setValue(port.intValue());
@@ -94,6 +107,12 @@ public class GeneralTabController
     @FXML
     private void initialize()
     {
+        // A new instance on every open, bound to a fresh node tree. FXMLLoader builds fx:includes
+        // depth-first, so this line arrives before the shell's own — the same order the ribbon
+        // groups run in, and the reason a tab may subscribe to AppState here but must not publish.
+        LOG.log(System.Logger.Level.DEBUG,
+                () -> "General tab " + id(this) + " initializing; AppState theme is " + appState.getTheme());
+
         // Set here rather than in the FXML: labelFor="$themeChoice" would be a forward reference to
         // an fx:id declared further down the file, which FXMLLoader quietly resolves to null —
         // markup asserting an association it does not make.
@@ -127,12 +146,19 @@ public class GeneralTabController
         themeChoice.setValue(appState.getTheme());
         themeChoice.valueProperty().addListener((observable, old, theme) ->
         {
+            // Where the use case begins: AppState, ThemeService and the settings writer all hang
+            // off this one selection.
+            LOG.log(System.Logger.Level.DEBUG,
+                    () -> "General tab " + id(this) + ": choice box moved " + old + " -> " + theme);
             if (theme != null)
             {
                 appState.setTheme(theme);
             }
         });
         appState.themeProperty().addListener(new WeakChangeListener<>(themeListener));
+        // Weak, so this controller stops hearing about the theme once the closed dialog's node tree
+        // is collected. A reopened dialog subscribes again, from its own new instance.
+        LOG.log(System.Logger.Level.DEBUG, () -> "General tab " + id(this) + ": subscribed weakly to AppState.theme");
     }
 
     private void initGlobalSettings()
@@ -176,9 +202,16 @@ public class GeneralTabController
     @FXML
     private void onResetToDefaults()
     {
+        LOG.log(System.Logger.Level.DEBUG, () -> "General tab " + id(this) + ": Reset to defaults");
         appState.setTheme(Settings.DEFAULTS.theme());
         appState.setBlastPort(Settings.DEFAULTS.blastPort());
         appState.setSingleMessage(Settings.DEFAULTS.singleMessage());
         appState.setByteHijack(Settings.DEFAULTS.byteHijack());
+    }
+
+    /** Matches ThemeService's form, so one instance reads the same way across the whole trace. */
+    private static String id(Object o)
+    {
+        return o.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(o));
     }
 }

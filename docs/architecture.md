@@ -729,6 +729,36 @@ Contrast is enforced rather than documented: `ThemeContrastTest` parses the toke
 every on-screen pair in both themes. The tightest is 3.32:1 in light and 4.38:1 in dark, both
 non-text pairs against a 3:1 floor.
 
+### Tracing a theme change
+
+Every failure this feature has had is silent from the outside: the stored value is right, and the
+screen disagrees with it. So the path is traced at DEBUG, at the points where the two can part
+company — and nowhere else, since a trace that logged every setter would bury these lines under the
+port spinner's.
+
+`logging.level.com.culberth.tools.datablaster=DEBUG` in `application.properties` is what makes them
+appear; `System.Logger` reaches Logback through Boot's JUL bridge, so without that line the calls
+run and print nothing. Comment it out for a quiet console.
+
+Following one switch, in order:
+
+| Where | What it says |
+| --- | --- |
+| `MainController.onPreferences` | the menu item, and — because `showModal` blocks — the dismissal, as a bracket around everything else |
+| `DialogService.showModal` | the resource, then the root and controller identities, then showing, then closed |
+| `GeneralTabController` / `PreferencesController` `initialize` | a *new* prototype instance per open; the tabs log before the shell, because `FXMLLoader` builds `fx:include`s depth-first |
+| `GeneralTabController` choice box | the selection that starts the whole thing |
+| `AppState.setTheme` | the transition, and explicitly when it is a no-op — setting the theme to what it already holds fires nothing, and that silence is otherwise indistinguishable from a broken listener |
+| `ThemeService.reapplyToAll` | that the listener fired at all, then every root re-styled and every collected one dropped, with counts |
+| `ThemeService.applyTo` / `remember` | a new scene born with the current theme, the size of the tracked list, and any root collected since the last sweep |
+| `GeneralTabController` write-back | `AppState` pushing the value back into the choice box, noting when it changes nothing |
+| `SettingsService.scheduleWrite` | queued, or coalesced into a write already outstanding |
+
+Roots and controllers are logged as `SimpleName@identityHash`, in the same form everywhere. That is
+the point of the trace across a close-and-reopen: the second Preferences window is a different
+object with the same class and the same contents, and its root joins the tracked list while the
+first is only dropped at the next re-apply, whenever the collector gets to it.
+
 ### The file
 
 A properties file under the platform's per-user config location (`%APPDATA%` on Windows,
