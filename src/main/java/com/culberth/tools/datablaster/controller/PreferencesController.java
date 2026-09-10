@@ -36,6 +36,8 @@ import org.springframework.stereotype.Component;
 public class PreferencesController
 {
 
+    private static final System.Logger LOG = System.getLogger(PreferencesController.class.getName());
+
     /**
      * Bound only so the loader has something to bind; nothing here reads it.
      *
@@ -54,12 +56,25 @@ public class PreferencesController
         {
             throw new IllegalStateException("Preferences loaded with no tabs; check the fx:includes");
         }
+        // Prototype-scoped: a second open logs a second, different instance here. If the same one
+        // ever appeared twice, the shell would be bound to a node tree no longer on screen. This
+        // line closes the open sequence rather than starting it — the tab controllers have already
+        // logged their own, because FXMLLoader builds fx:includes depth-first.
+        LOG.log(System.Logger.Level.DEBUG, () -> "Preferences shell " + id(this) + " initialized with "
+                + tabs.getTabs().size() + " tab(s); its tab controllers have already run");
     }
 
     @FXML
     private void onClose(ActionEvent event)
     {
+        LOG.log(System.Logger.Level.DEBUG, () -> "Preferences shell " + id(this) + ": Close pressed");
         ((Stage) windowOf(event)).close();
+    }
+
+    /** Matches ThemeService's form, so one instance reads the same way across the whole trace. */
+    private static String id(Object o)
+    {
+        return o.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(o));
     }
 
     private static Window windowOf(ActionEvent event)

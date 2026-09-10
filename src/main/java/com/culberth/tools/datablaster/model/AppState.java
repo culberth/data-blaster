@@ -66,6 +66,15 @@ public class AppState
 {
 
     /**
+     * The one place every theme change passes through, whichever control started it.
+     *
+     * <p>
+     * Kept to the mutators that the theme use case actually crosses rather than added to all of them: a trace that
+     * logged every setter would bury the four lines being followed under the port spinner's.
+     */
+    private static final System.Logger LOG = System.getLogger(AppState.class.getName());
+
+    /**
      * The JavaFX Application Thread, recorded when the UI starts.
      *
      * <p>
@@ -540,6 +549,11 @@ public class AppState
     public void setTheme(Theme value)
     {
         requireFxThread();
+        Theme previous = theme.get();
+        // The transition, not just the new value: setting the theme to what it already is fires no
+        // listener at all, and that silence is otherwise indistinguishable from a broken listener.
+        LOG.log(System.Logger.Level.DEBUG, () -> "setTheme: " + previous + " -> " + value
+                + (previous == value ? " (unchanged; no listener will fire)" : ""));
         theme.set(value);
     }
 

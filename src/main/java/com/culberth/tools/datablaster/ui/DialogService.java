@@ -39,7 +39,13 @@ public class DialogService
     {
         try
         {
+            LOG.log(System.Logger.Level.DEBUG, () -> "showModal: loading " + fxmlResource);
             ViewLoader.LoadedView loaded = viewLoader.load(fxmlResource);
+            // Both identities, because both are new on every open: a reopened Preferences has a
+            // fresh prototype controller bound to a fresh node tree, and the theme trace in
+            // ThemeService reports the same root by the same name.
+            LOG.log(System.Logger.Level.DEBUG, () -> "showModal: loaded root " + id(loaded.root()) + " with controller "
+                    + id(loaded.controller()));
 
             Stage dialog = new Stage();
             dialog.initModality(Modality.APPLICATION_MODAL);
@@ -51,12 +57,24 @@ public class DialogService
             dialog.setTitle(title);
             dialog.setResizable(false);
             dialog.setScene(viewLoader.newScene(loaded.root()));
+            LOG.log(System.Logger.Level.DEBUG, () -> "showModal: showing " + title + " (modal; blocks until closed)");
             dialog.showAndWait();
+            // The scene graph above is unreachable from here on. ThemeService holds it weakly, so
+            // its next re-apply is where a closed dialog is seen to drop off the tracked list.
+            LOG.log(System.Logger.Level.DEBUG,
+                    () -> "showModal: " + title + " closed; root " + id(loaded.root()) + " is now discarded");
         }
         catch (Exception e)
         {
             showError("Unable to open " + title, e);
         }
+    }
+
+    /** Matches {@code ThemeService}'s form, so the same root reads the same way in both traces. */
+    private static String id(Object o)
+    {
+        return o == null ? "none"
+                : o.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(o));
     }
 
     /**
